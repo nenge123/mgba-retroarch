@@ -130,8 +130,7 @@
             }else{
                 this.$('.game-setting').hidden = false;
             }
-            this.Module.canvas.hidden = false;
-            this.$('.game-zan').remove();
+            this.$('.game-zan').hidden = true;
         }
         Timer = {};
         BtnMap = {
