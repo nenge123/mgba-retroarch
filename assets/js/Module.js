@@ -61,7 +61,8 @@ var Module = new class{
     }
     async INSTALL_WASM(coreFile){
         let corename = this.__coresname.split('_')[0],
-            coredata = this.REPLACE_MODULE(await (await fetch(`assets/${corename}_libretro.js`)).arrayBuffer());//await this.IDBFS.getContent('coredata',`${corename}_libretro.js`);
+            coredata = await this.IDBFS.getContent('coredata',`${corename}_libretro.js`);
+            //this.REPLACE_MODULE(await (await fetch(`assets/${corename}_libretro.js`)).arrayBuffer());//
         this.wasmBinary = (await this.IDBFS.getContent('coredata',`${corename}_libretro.wasm`));
         if(!coredata || !this.wasmBinary){
             this.SetConfig({version:null});
