@@ -2,6 +2,7 @@
     Module.EVENT = new class{
         istouch = "ontouchstart" in document;
         resize(){
+            if(!this.Module.setCanvasSize) return;
             let nav = this.$('.game-container').getBoundingClientRect(),can = this.canvas.getBoundingClientRect();
             let w = Math.min(window.innerWidth,document.documentElement.clientWidth,nav.width),
                h = Math.min(window.innerHeight,document.documentElement.clientHeight,nav.height);
