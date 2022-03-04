@@ -449,10 +449,7 @@ var Module = new class{
                    var db = e.target.result;
                    var transaction = e.target.transaction;
                    var fileStore;
-                   if (db.objectStoreNames.contains(storeName)) {
-                       fileStore = transaction.objectStore(storeName);
-                       if(!fileStore.indexNames.contains("timestamp"))fileStore.createIndex("timestamp", "timestamp", {unique: false});
-                   } else {
+                   if (!db.objectStoreNames.contains(storeName)) {
                        for(var i in this.DB_STORE_MAP){
                            if(db.objectStoreNames.contains(this.DB_STORE_MAP[i]))continue;
                            let Store = db.createObjectStore(this.DB_STORE_MAP[i]);
@@ -460,8 +457,10 @@ var Module = new class{
                            if(this.DB_STORE_MAP[i] == storeName) fileStore = Store;
                         }
                         if(!fileStore){
-                            fileStore = db.objectStoreNames.contains(storeName);
-                            if(!fileStore.indexNames.contains("timestamp"))fileStore.createIndex("timestamp", "timestamp", {unique: false});
+                            fileStore = db.createObjectStore(storeName);
+                            if(!fileStore.indexNames.contains("timestamp")){
+                                fileStore.createIndex("timestamp", "timestamp", {unique: false});
+                            }
                         }
                    }
                };
