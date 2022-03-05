@@ -1,9 +1,9 @@
-(function(Module){
-    Module.EVENT = new class{
+(function(NengeApp){
+    NengeApp.EVENT = new class{
         istouch = "ontouchstart" in document;
         resize(){
-            if(!this.Module.setCanvasSize) return;
-            let nav = this.$('.game-container').getBoundingClientRect(),can = this.canvas.getBoundingClientRect();
+            if(!Module.setCanvasSize || Module.callMain) return;
+            let nav = this.$('.game-container').getBoundingClientRect(),can = Module.canvas.getBoundingClientRect();
             let w = Math.min(window.innerWidth,document.documentElement.clientWidth,nav.width),
                h = Math.min(window.innerHeight,document.documentElement.clientHeight,nav.height);
                if(h==0) h = w==window.innerWidth ? window.innerHeight:w/can.width *can.height;
@@ -15,31 +15,59 @@
                     this.$('.game-ctrl').removeAttribute('style');
                    }
                }
-               this.Module.setCanvasSize(w,h);
+               Module.setCanvasSize(w,h);
         }
         async onReady(){
             this.on(window,'resize',e=>this.resize());
             this.on(this.$('.game-container'),'contextmenu',e=>{
-                this.canvas.dispatchEvent(new MouseEvent('contextmenu',{}));
+                Module.canvas.dispatchEvent(new MouseEvent('contextmenu',{}));
                 e.preventDefault()
             },false);
             this.on(document,'keydown',e=>{
                 if(this.$('.game-result').childNodes[0]) return;
                 e.preventDefault();
-                this.canvas.dispatchEvent(this.KeyboardEvent(e));
+                Module.canvas.dispatchEvent(this.KeyboardEvent(e));
             });
             this.on(document,'keyup',e=>{
                 if(this.$('.game-result').childNodes[0]) return;
                 e.preventDefault();
-                this.canvas.dispatchEvent(this.KeyboardEvent(e));
+                Module.canvas.dispatchEvent(this.KeyboardEvent(e));
             });
             let $ = e=>document.querySelector(e),
                 $$ = e=>document.querySelectorAll(e),
-                mobileEvent = ['touchstart', 'touchmove', 'touchcancel', 'touchend'],
                 ELM_ATTR = (elm, key)=>{if (elm!=undefined &&elm!=null&& elm.nodeType == 1) return elm.getAttribute(key);},
-                stopEvent = (e,bool)=>{if(!bool)e.preventDefault();e.stopPropagation();return false;},
-                sendState = (arr)=>{
-                if(!this.KeyState) return;
+                stopEvent = (e,bool)=>{if(!bool)e.preventDefault();e.stopPropagation();return false;};
+                this.on($('.game-msg'),'click',e=>{
+                    this.BtnMap['CloseMsg']();
+                    return stopEvent(e);
+                });
+                this.on($('.game-setting'),'click',e=>{
+                if(Module.callMain){
+                    try{
+                        Module.callMain(Module.arguments);
+                        delete Module.callMain;
+                        delete Module.wasmBinary;
+                        this.StartRetroArch();
+                        this.__FILE__ = {};
+                        this.NengeApp.InitKeyMap();
+                        this.resize();
+                    }catch(err){
+                        alert(err);
+                    }
+                }else{
+                    this.BtnMap['settings']();
+                }
+                return stopEvent(e);
+            });
+            if(this.istouch){
+                /*mobile*/
+                let  mobileEvent = ['touchstart', 'touchmove', 'touchcancel', 'touchend'],sendState = (arr)=>{
+                if(!this.KeyState) {
+                    this.KeyState = {};
+                    for(let i in this.KeyMap){
+                        this.KeyState[i] = 0;
+                    }
+                };
                 for(var i in this.KeyMap){
                     let k = i.replace('input_player1_','');
                     if(arr.includes(k)){
@@ -51,19 +79,6 @@
                     }
                 }
                 };
-                this.on($('.game-msg'),'click',e=>{
-                    this.BtnMap['CloseMsg']();
-                });
-                this.on($('.game-setting'),'click',e=>{
-                if(!this.Module._main){
-                    this.$('.game-setting').hidden = true;
-                    this.Module.onReady();
-                }else{
-                    this.BtnMap['settings']();
-                }
-            });
-            if(this.istouch){
-                /*mobile*/
                 mobileEvent.forEach(
                     val =>this.on(
                         $('.game-ctrl'),
@@ -105,6 +120,41 @@
                         {'passive': false}
                     )
                 );
+                /*
+                let KeyMap = this.KeyMap;
+                let keyToCode = this.keyToCode;
+                let keypress = (k,b)=>{
+                    this.keyPress(keyToCode[KeyMap['input_player1_'+k]],b);
+                };
+                let mobile_click = (e)=>{
+                    let type = e.type,k=ELM_ATTR(e.target, 'data-k'),mm=type =="pointerdown"?'keydown':'keyup';
+                    if(k){
+                        if(KeyMap['input_player1_'+k]) keypress(k,mm);
+                        else if(k=='ul')['up','left'].forEach(val=>keypress(val,mm));
+                        else if(k=='ur')['down','right'].forEach(val=>keypress(val,mm));
+                        else if(k=='dl')['up','left'].forEach(val=>keypress(val,mm));
+                        else if(k=='dr')['down','right'].forEach(val=>keypress(val,mm));
+                    }
+                    return stopEvent(e);
+                };
+                let mobile_btn = (e)=>{
+                    let k=ELM_ATTR(e.target, 'data-btn');
+                    if(k&&this.BtnMap[k])this.BtnMap[k]();
+                    return stopEvent(e);
+                };
+                this.$$('.vk[data-k]').forEach(elm=>{
+                    this.on(elm,'pointerdown',e=>mobile_click(e));
+                    this.on(elm,'pointerup',e=>mobile_click(e));
+                    this.on(elm,'pointermove',e=>stopEvent(e),{passive:false});
+                });
+                this.$$('.game-ctrl-menu [data-btn]').forEach(elm=>{
+                    this.on(elm,'pointerup',e=>mobile_btn(e));
+                    this.on(elm,'pointermove',e=>stopEvent(e),{passive:false});
+                    this.on(elm,'pointerdown',e=>stopEvent(e));
+                });
+                this.on(this.$('.game-ctrl-menu'),'touchmove',e=>stopEvent(e),{passive:false});
+                this.on(this.$('.game-ctrl-menu'),'touchstart',e=>stopEvent(e),{passive:false});
+                */
             };
             this.on($('.game-list'),this.istouch ? 'touchend':'mouseup',event=>{
                 let ct = event.changedTouches && event.changedTouches[0],
@@ -286,7 +336,7 @@
             },
             'canvasBlob':e=>{
                 return new Promise(compelte=>{
-                    this.Module.canvas.toBlob(b=>compelte(b),{type: "image/png"})
+                    Module.canvas.toBlob(b=>compelte(b),{type: "image/png"})
                 });
             },
             'SparkMD5':e=>{
@@ -320,7 +370,7 @@
                 this.$('.game-setting').hidden = true;
             },
             'fullscreen':e=>{
-                this.Module.requestFullscreen(false);
+                Module.requestFullscreen(false);
             },
             'deletecfg':e=>{
                 this.BtnMap['closelist']();
@@ -336,8 +386,13 @@
                 location.reload();
             },
             remove:async e=>{
-                await this.IDBFS.clearDB();
-                location.href = 'https://nenge.net';
+                try{
+                    let m = await this.IDBFS.clearDB(typeof e=='string'&&e||'');
+                    this.BtnMap['closelist']();
+                }catch(err){
+                    alert(err);
+                }
+                
             },
             stateload:e=>{
                 let keyname = 'input_load_state';
@@ -369,9 +424,9 @@
             },
             'checkFile':(u8,name,cb)=>{
                 let head = new TextDecoder().decode(u8.slice ? u8.slice(0,6):subarray(0,6));
-                if(/^7z/.test(head))this.Module.un7z(u8,name).then(e=>cb(e));
-                else if(/^Rar!/.test(head))this.Module.unRAR(u8,name).then(e=>cb(e));
-                else if(/^PK/.test(head))this.Module.unZip(u8,name).then(e=>cb(e));
+                if(/^7z/.test(head))this.NengeApp.un7z(u8,name).then(e=>cb(e));
+                else if(/^Rar!/.test(head))this.NengeApp.unRAR(u8,name).then(e=>cb(e));
+                else if(/^PK/.test(head))this.NengeApp.unZip(u8,name).then(e=>cb(e));
                 else {
                     let data = {};
                     data[name] = u8;
@@ -433,7 +488,6 @@
                         temp  = newpath.split('.');
                         FS.rename(newpath,temp.slice(0,-1).join('.')+new Date().valueOf()+temp.pop());
                     }
-                    //FS.writeFile(newpath,FS.readFile(oldpath));
                     FS.rename(oldpath,newpath);
                     FS.syncfs(e=>{
                         this.BtnMap['closelist']();
@@ -567,7 +621,7 @@
             }else if(/\[INFO\]\s\[Video\]:\sVideo\s@\s\d+x\d+/.test(text)||/\[INFO\]\s\[Video\]:\s?Set\s?video\s?size\sto:\s\d+x\d+\.?/.test(text)){
                 let wh = text.split(' ').pop().split('x');
                 this.AspectRatio = wh&&Number(wh[0])/Number(wh[1]);
-                if(!this.Module.callMain)this.resize();
+                if(Module._main)this.resize();
             }
             else{
               let data = [
@@ -593,6 +647,7 @@
         }
         constructor(){
             let onready = e=>{
+                this.NengeApp.onReady();
                 this.onReady();
                 this.un(document,t,onready);
             },
@@ -615,7 +670,7 @@
         }
         keyPress(key,type){
             let m = this.keyToCode[key.toLowerCase()];
-            this.canvas.dispatchEvent(new KeyboardEvent(type, {'code':m||key,'key':key}));
+            Module.canvas.dispatchEvent(new KeyboardEvent(type, {'code':m||key,'key':key}));
         }
         keyPressOnce(key){
             this.keyPress(key,'keydown');
@@ -642,61 +697,55 @@
               "which":e.which
            });
         }
-        RESULT = (html,bool)=>this.Module.HTML.RESULT(html,bool);
-        MSG = (html,bool)=>this.Module.HTML.MSG(html,bool);
-        SetConfig = d=>this.Module.SetConfig(d);
-        get Module(){
-            return Module;
+        RESULT = (html,bool)=>this.HTML.RESULT(html,bool);
+        MSG = (html,bool)=>this.HTML.MSG(html,bool);
+        SetConfig = d=>this.NengeApp.SetConfig(d);
+        get NengeApp(){
+            return NengeApp;
         }
         get IDBFS(){
-            return this.Module.IDBFS;
+            return this.NengeApp.IDBFS;
         }
         get HTML(){
-            return this.Module.HTML;
-        }
-        get KeyState(){
-            return this.Module.KeyState;
+            return this.NengeApp.HTML;
         }
         get KeyMap(){
-            return this.Module.KeyMap;
+            return this.NengeApp.KeyMap;
         }
         get keyToCode(){
-            return this.Module.keyToCode;
-        }
-        get canvas(){
-            return this.Module.canvas;
+            return this.NengeApp.keyToCode;
         }
         get CONFIG(){
-            if(!this.Module.CONFIG)this.Module.CONFIG = JSON.parse(localStorage.getItem(this.Module.__coresname))
-            return this.Module.CONFIG;
+            if(!this.NengeApp.CONFIG)this.NengeApp.CONFIG = JSON.parse(localStorage.getItem(this.NengeApp.CoreName))
+            return this.NengeApp.CONFIG;
         }
         get GameName(){
-            if(!this.Module.GameLink) return "";
+            if(!this.NengeApp.GameLink) return "";
             return this.GameLink.split('/').pop();
         }
         get GameSys(){
-            if(!this.Module.GameLink) return "";
+            if(!this.NengeApp.GameLink) return "";
             return this.GameName.split('.').pop();
         }
         get GameLink(){
-            if(!this.Module.GameLink)this.Module.GameLink = this.CONFIG['lastgame'];
-            return this.Module.GameLink;
+            if(!this.NengeApp.GameLink)this.NengeApp.GameLink = this.CONFIG['lastgame'];
+            return this.NengeApp.GameLink;
         }
         set GameLink(name){
             this.SetConfig({'lastgame':name});
-            this.Module.GameLink = name;
+            this.NengeApp.GameLink = name;
         }
         get CoresName(){
-            return this.Module.CoresName;
+            return this.NengeApp.CoresName;
         }
         set CoresName(name){
-            this.Module.CoresName = name;
+            this.NengeApp.CoresName = name;
         }
         get AspectRatio(){
-            return this.Module.AspectRatio;
+            return this.NengeApp.AspectRatio;
         }
         set AspectRatio(name){
-            this.Module.AspectRatio = name;
+            this.NengeApp.AspectRatio = name;
         }
     }
-})(Module);
+})(NengeApp);

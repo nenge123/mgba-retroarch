@@ -1,11 +1,8 @@
-(function(Module){
-    Module.HTML = new class{
+(function(NengeApp){
+    NengeApp.HTML = new class{
         istouch = "ontouchstart" in document;
         $ = e=>document.querySelector(e);
         $$ = e=>document.querySelectorAll(e);
-        get BtnMap(){
-            return Module.EVENT.BtnMap;
-        }
         Timer = {};
         syncfs(file){
             this.MSG(`文件同步成功${file&&`<p>位置：${file}</p>`||``}`,true);
@@ -103,5 +100,14 @@
                 this.Timer.msg = setTimeout(e => this.BtnMap['CloseMsg'](),2000)
             }
         }
+        get NengeApp(){
+            return NengeApp;
+        }
+        get EVENT(){
+            return this.NengeApp.EVENT;
+        }
+        get BtnMap(){
+            return this.EVENT.BtnMap;
+        }
     }
-}(Module))
+}(NengeApp))
