@@ -9,7 +9,7 @@ var Module = new class {
     monitorRunDependencies =  function (left) {
         this.totalDependencies = Math.max(this.totalDependencies, left);
     }
-    version = 1.3;
+    version = 2.1;
     CoreName = 'mgba_config_data';
     BASEPATH = "/home/web_user/retroarch";
     USERPATH = "/userdata";
@@ -31,6 +31,7 @@ var Module = new class {
             this.arguments.push(this.GameLink);
         }
         this.EVENT.$('.game-setting').hidden = false;
+        this.EVENT.$('.game-setting').innerHTML = this.HTML.translate('启动');
         if (this.version != this.CONFIG.version) FS.syncfs(e => this.SetConfig({'version': this.version}));
     }
     InitializedData(){
@@ -52,22 +53,28 @@ var Module = new class {
     get BtnMap() {
         return this.EVENT.BtnMap;
     }
+    CreateDataFile(path,data){
+        let dir = path.split('/').slice(0,-1).join('/');
+        if (!FS.analyzePath(dir).exists) FS.createPath('/', dir);
+        if (!FS.analyzePath(path).exists) FS.createDataFile(dir, path.split('/').pop(),data, !0, !0);
+    }
     async INSTALL_WASM(coreFile) {
         let corename = this.CoreName.split('_')[0];
-        let coredata = await this.IDBFS.getContent('coredata',`${corename}_libretro.js`);
-        //let coredata = this.REPLACE_MODULE(await (await fetch(`assets/${corename}_libretro.js`)).arrayBuffer()); //
+        //let coredata = await this.IDBFS.getContent('coredata',`${corename}_libretro.js`);
+        let coredata = this.REPLACE_MODULE(await (await fetch(`assets/${corename}_libretro.js`)).arrayBuffer()); //
         //(await this.IDBFS.getContent('coredata',`${corename}_libretro.wasm`));
         
         this.wasmBinary = await this.IDBFS.getContent('coredata',`${corename}_libretro.wasm`);
         //this.wasmBinary = new Uint8Array(await (await fetch(`assets/${corename}_libretro.wasm`)).arrayBuffer());
         if(!coredata || !this.wasmBinary){
             this.SetConfig({version:null});
-           return this.BtnMap['reload']();
+            return this.onReady();
         }
         this.printErr = text => {
             console.log(text);
             this.EVENT.checkLog(text);
         };
+        //chinese-fallback-font.ttf
         this.onRuntimeInitialized = e => {
             FS.createPath('/', '/userdata', !0, !0);
             FS.createPath('/', `${this.BASEPATH}/userdata`, !0, !0);
@@ -78,9 +85,17 @@ var Module = new class {
             FS.syncfs(!0, ok => {
                 if (coreFile) {
                     for (let file in coreFile) {
+                        let path = `${this.BASEPATH}/bundle/${file}`;
+                        this.CreateDataFile(path,coreFile[file]);
+                        if(/chinese\-fallback\-font\.ttf$/.test(file)){
+                            this.CreateDataFile(`${this.BASEPATH}/bundle/assets/glui/font.ttf`,coreFile[file]);
+                            this.CreateDataFile(`${this.BASEPATH}/bundle/assets/pkg/fallback-font.ttf`,coreFile[file]);
+                        }
+                        /*
                         let path = `${this.BASEPATH}/bundle/${file.split('/').slice(0, -1).join('/')}`;
                         if (!FS.analyzePath(path).exists) FS.createPath('/', path);
                         if (!FS.analyzePath(`${this.BASEPATH}/bundle/${file}`).exists) FS.createDataFile(path, file.split('/').pop(), coreFile[file], !0, !0);
+                        */
                         delete coreFile[file];
                     }
                     coreFile = null;
@@ -97,6 +112,9 @@ var Module = new class {
                         //`video_shader_enable = true\n`+
                         `savestate_auto_load = true\n`+
                         //`fastforward_ratio = 1.0\n`+
+                        `rewind_enable = "false"\n`+
+                        `video_font_path = "/home/web_user/retroarch/bundle/assets/pkg/chinese-fallback-font.ttf"\n`+
+                        `xmb_font = "/home/web_user/retroarch/bundle/assets/pkg/chinese-fallback-font.ttf"\n`+
 
 
                         `menu_widget_scale_auto = "false"\n` +
@@ -130,7 +148,7 @@ var Module = new class {
                         `settings_show_saving = "false"\n` +
                         `camera_allow = "false"\n` +
                         `camera_driver = "null"\n` +
-                        `camera_device = ""\n` +
+                        `camera_device = "null"\n` +
                         `input_max_users = "1"\n`+
                         //+`bundle_assets_extract_enable = "false"\n`
                         `quick_menu_show_information = "false"\n` +
@@ -143,6 +161,8 @@ var Module = new class {
                         `quick_menu_show_start_streaming = "false"\n` +
                         `quick_menu_show_streaming = "false"\n` +
                         `quick_menu_show_add_to_favorites = "false"\n` +
+
+                        `content_show_explore = "fasle"\n` +
                         `content_show_favorites = "fasle"\n` +
                         `content_show_history = "fasle"\n` +
                         `content_show_music = "fasle"\n` +
@@ -151,6 +171,7 @@ var Module = new class {
                         `content_history_path = "null"\n` +
                         `content_image_history_path = "null"\n` +
                         `content_music_history_path = "null"\n` +
+
                         `playlist_directory = "null"\n` +
                         `auto_screenshot_filename = "false"\n` +
                         `savestate_thumbnail_enable = "false"\n` +
@@ -179,7 +200,17 @@ var Module = new class {
                 this.StartRetroArch();
             });
         };
-        coredata = `((Module)=>{${coredata};;self.FS = FS;self.PATH = PATH;self.MEMFS = MEMFS;Module.LoopTime = e=>_emscripten_set_main_loop_timing(1,1);self.Browser = Browser})(Module);`;
+        coredata = `((Module)=>{`+
+                        `${coredata};`+
+                        `FS.PATH = PATH;`+
+                        `FS.MEMFS = MEMFS;`+
+                        `self.FS = FS;`+
+                        `Module.LoopTime = e=>_emscripten_set_main_loop_timing(1,1);`+
+                        `Module.RA = RA;`+
+                        `Module.FS = FS;`+
+                        `Module._RWebAudioInit = _RWebAudioInit;`+
+                        `Module.Browser = Browser`+
+                    `})(Module);`;
         let script = document.createElement('script');
         script.src = window.URL.createObjectURL(new Blob([coredata], {
             type: 'text/javascript'
@@ -361,7 +392,7 @@ var Module = new class {
             return ret
         }
         mount(mount) {
-            return FS.filesystems.MEMFS.mount.apply(null, arguments)
+            return FS.MEMFS.mount.apply(null, arguments)
         }
         syncfs(mount, populate, callback) {
             return new Promise(cb => {
@@ -510,7 +541,7 @@ var Module = new class {
                 },
                 toAbsolute = root => {
                     return function (p) {
-                        return PATH.join2(root, p)
+                        return FS.PATH.join2(root, p)
                     }
                 },
                 check = FS.readdir(mount.mountpoint).filter(isRealDir).map(toAbsolute(mount.mountpoint));
@@ -577,7 +608,7 @@ var Module = new class {
                     mode: stat.mode
                 })
             } else if (FS.isFile(stat.mode)) {
-                node.contents = MEMFS.getFileDataAsTypedArray(node);
+                node.contents = FS.MEMFS.getFileDataAsTypedArray(node);
                 return callback(null, {
                     timestamp: stat.mtime,
                     mode: stat.mode,
@@ -817,6 +848,7 @@ var Module = new class {
         input_save_state: "f2",
         input_menu_toggle: "f1",
         input_toggle_slowmotion: null,
+        audio_latency:128,
     };
     keyToCode = {
         "tilde": "Backquote",

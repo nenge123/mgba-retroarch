@@ -2,19 +2,20 @@
     Module.EVENT = new class{
         istouch = "ontouchstart" in document;
         resize(){
-            if(!Module.setCanvasSize || Module.callMain) return;
+            if(!Module.setCanvasSize) return;
             let nav = this.$('.game-container').getBoundingClientRect(),can = this.canvas.getBoundingClientRect();
             let w = Math.min(window.innerWidth,document.documentElement.clientWidth,nav.width),
-               h = Math.min(window.innerHeight,document.documentElement.clientHeight,nav.height);
+               h = Math.min(window.innerHeight,document.documentElement.clientHeight,nav.height),
+               tmph = w/(this.AspectRatio||1.5);
                if(h==0) h = w==window.innerWidth ? window.innerHeight:w/can.width *can.height;
-               if(this.$('.game-ctrl').hidden == false){
-                   if(h>w){
-                       h = w/(this.AspectRatio||1.5);
+               //if(this.$('.game-ctrl').hidden == false){
+                   if(h>w&&h>=tmph){
+                       h = tmph;
                        this.$('.game-ctrl').style.height = (nav.height - h)+'px';
                    }else{
-                    this.$('.game-ctrl').removeAttribute('style');
+                       this.$('.game-ctrl').removeAttribute('style');
                    }
-               }
+               //}
                Module.setCanvasSize(w,h);
         }
         SetKeyMap(){
@@ -24,10 +25,12 @@
             }
         }
         resumeMainLoop(){
+            //fix mobile error
             if(Module.callMain) return;
+            Module.pauseMainLoop&&Module.pauseMainLoop();
             Module._free();
             Module._fflush();
-            Module.LoopTime&&Module.LoopTime();
+            //Module.LoopTime&&Module.LoopTime();
             if(this.istouch){
                 this.BtnMap['hideui']();
                 this.$('.game-setting').classList.remove('game-tp');
@@ -38,10 +41,9 @@
             }
         }
         setLanguage(str){
-            if(!Module.callMain) return ;
-            if(this.CONFIG.lang == str) return this.$('.game-setting').click();
+            if(this.$('.game-setting').hidden) return ;
             this.SetConfig({'lang':str||''});
-            this.BtnMap['reload']();
+            this.$('.game-setting').click();
         }
         async onReady(){
             this.canvas = document.querySelector('.game-container canvas');
@@ -84,17 +86,16 @@
                 $$ = e=>document.querySelectorAll(e),
                 ELM_ATTR = (elm, key)=>{if (elm!=undefined &&elm!=null&& elm.nodeType == 1) return elm.getAttribute(key);},
                 stopEvent = (e,bool)=>{if(!bool)e.preventDefault();e.stopPropagation();return false;};
-                this.on($('.game-msg'),'click',e=>{
+                this.on($('.game-msg'),'click',e=>{                    
+                    if(Module.callMain === true){
+                        this.$('.game-setting').click();
+                    }
                     this.BtnMap['CloseMsg']();
                     return stopEvent(e);
                 });
                 this.on($('.game-setting'),'click',e=>{
                     if(Module.callMain){
-                        if(Module.callMain === true){
-                            delete Module.callMain;
-                            this.StartRetroArch();
-                            Module.resumeMainLoop&&Module.resumeMainLoop();
-                        }else{
+                        if(typeof Module.callMain == 'function'){
                             try{
                                 Module.callMain(Module.arguments);
                                 this.StartRetroArch();
@@ -105,7 +106,17 @@
                                 alert(err);
                             }
 
-                        }
+                        }else if(Module.callMain === true){
+                            //fix mobile
+                            delete Module.callMain;
+                            this.StartRetroArch();
+                            if(!Module.RA.context || Module.RA.state=="closed"){
+                                if(Module._RWebAudioInit(this.KeyMap['audio_latency'])){
+                                    return ;
+                                }
+                            }
+                            Module.resumeMainLoop&&Module.resumeMainLoop();
+                        } 
                     }else{
                         this.BtnMap['settings']();
                     }
@@ -666,10 +677,12 @@
                 }else{
                     console.log(link,text);
                 }
-            }else if(/\[INFO\]\s\[Video\]:\sVideo\s@\s\d+x\d+/.test(text)||/\[INFO\]\s\[Video\]:\s?Set\s?video\s?size\sto:\s\d+x\d+\.?/.test(text)){
+            }else if(/Video\s@\s\d+x\d+\.$/.test(text)||/Set\s?video\s?size\sto:\s\d+x\d+\./.test(text)){
                 let wh = text.split(' ').pop().split('x');
-                this.AspectRatio = wh&&Number(wh[0])/Number(wh[1]);
+                this.AspectRatio = wh&&wh[0]&&wh[1]&&Number(wh[0])/Number(wh[1]);
+                if(!this.AspectRatio)this.AspectRatio = 1.5;
                 if(Module._main)this.resize();
+            }else if((/Unloading\score\ssymbols\.\.$/i).test(text)){
                 this.resumeMainLoop();
             }
             else{
@@ -679,7 +692,7 @@
                   // /^\[INFO\]\s\[State\]:\sFile\salready\sexists\./i,
                   ///^\[INFO\] \[State\]: Loading state "/,
                   // /^\[INFO\]\s\[State\]:\sSaving\sstate\s"\/userdata\/states\//i,
-                  /Saved new CONFIG to/i,
+                  /Saved\snew\sCONFIG\sto/i,
                   // /\[INFO\]\sApplying\scheat\schanges\./i
                   ];
               for(let i=0;i<data.length;i++)if(data[i].test(text)){

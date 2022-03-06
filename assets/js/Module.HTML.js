@@ -127,10 +127,12 @@
         }
         translate(str){
             let lang = this.CONFIG['lang'];
-            if(lang&&this.i8n[lang]&&this.i8n[lang][str]){
+            if(!lang) return str;
+            if(this.i8n[lang]&&this.i8n[lang][str]){
                 return this.i8n[lang][str];
                 
             }
+            console.log(`"${str}":"",`);
             return str;
         }
         i8n = {
@@ -138,6 +140,7 @@
                 "AI":"AI",
                 "继续":"continue",
                 "即存":"save",
+                "启动":"Run",
  "即读":"load",
  "菜单":"Menu",
  "点击这里关闭":"CLOSE",

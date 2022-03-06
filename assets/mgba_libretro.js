@@ -255,8 +255,8 @@ function setValue(ptr, value, type, noSafe) {
 }
 var wasmMemory;
 var wasmTable = new WebAssembly.Table({
-    "initial": 5038,
-    "maximum": 5038 + 0,
+    "initial": 5082,
+    "maximum": 5082 + 0,
     "element": "anyfunc"
 });
 var ABORT = false;
@@ -460,8 +460,8 @@ function updateGlobalBufferAndViews(buf) {
     Module["HEAPF32"] = HEAPF32 = new Float32Array(buf);
     Module["HEAPF64"] = HEAPF64 = new Float64Array(buf)
 }
-var DYNAMIC_BASE = 7076304,
-    DYNAMICTOP_PTR = 1833264;
+var DYNAMIC_BASE = 7143808,
+    DYNAMICTOP_PTR = 1900768;
 var INITIAL_TOTAL_MEMORY = Module["TOTAL_MEMORY"] || 134217728;
 if (Module["wasmMemory"]) {
     wasmMemory = Module["wasmMemory"]
@@ -8087,8 +8087,8 @@ function _glVertexAttribPointer(index, size, type, normalized, stride, ptr) {
 function _glViewport(x0, x1, x2, x3) {
     GLctx["viewport"](x0, x1, x2, x3)
 }
-var ___tm_current = 1833280;
-var ___tm_timezone = (stringToUTF8("GMT", 1833328, 4), 1833328);
+var ___tm_current = 1900784;
+var ___tm_timezone = (stringToUTF8("GMT", 1900832, 4), 1900832);
 
 function _tzset() {
     if (_tzset.called) return;
@@ -9030,21 +9030,21 @@ var asmLibraryArg = {
     "w": _glViewport,
     "e": invoke_i,
     "r": invoke_ii,
-    "o": invoke_iii,
+    "p": invoke_iii,
     "i": invoke_iiii,
     "ma": invoke_iiiii,
     "va": invoke_iiiiii,
     "kb": invoke_j,
-    "p": invoke_v,
+    "o": invoke_v,
     "l": invoke_vi,
-    "f": invoke_vii,
+    "g": invoke_vii,
     "K": invoke_viii,
     "Oc": _localtime,
     "Te": _localtime_r,
     "memory": wasmMemory,
     "sd": _mktime,
     "X": _nanosleep,
-    "g": _roundf,
+    "f": _roundf,
     "La": _saveSetjmp,
     "a": _setTempRet0,
     "B": _strftime,
