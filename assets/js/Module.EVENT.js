@@ -24,6 +24,7 @@
             }
         }
         resumeMainLoop(){
+            if(Module.callMain) return;
             Module._free();
             Module._fflush();
             Module.LoopTime&&Module.LoopTime();
@@ -92,16 +93,18 @@
                         if(Module.callMain === true){
                             delete Module.callMain;
                             this.StartRetroArch();
-                            return Module.resumeMainLoop&&Module.resumeMainLoop();
-                        }
-                        try{
-                            Module.callMain(Module.arguments);
-                            this.StartRetroArch();
-                            Module.InitializedData();
-                            this.HTML.onReady();
-                            this.resize();
-                        }catch(err){
-                            alert(err);
+                            Module.resumeMainLoop&&Module.resumeMainLoop();
+                        }else{
+                            try{
+                                Module.callMain(Module.arguments);
+                                this.StartRetroArch();
+                                Module.InitializedData();
+                                this.HTML.onReady();
+                                this.resize();
+                            }catch(err){
+                                alert(err);
+                            }
+
                         }
                     }else{
                         this.BtnMap['settings']();
@@ -426,10 +429,14 @@
                 this.BtnMap['closelist']();
                 if(FS.analyzePath(Module.CONFIGPATH).exists){
                     FS.unlink(Module.CONFIGPATH);
-                    FS.syncfs(e=>{
-                        this.MSG(`配置文件:${Module.CONFIGPATH}已被删除!`);
-                    })
                 }
+                if(FS.analyzePath(`${this.BASEPATH}/userdata/config/mGBA/mGBA.opt`).exists){
+                    FS.unlink(`${this.BASEPATH}/userdata/config/mGBA/mGBA.opt`);
+                }
+                if(FS.analyzePath(`${this.BASEPATH}/userdata/config/mGBA/mGBA.cfg`).exists){
+                    FS.unlink(`${this.BASEPATH}/userdata/config/mGBA/mGBA.cfg`);
+                }
+                this.IDBFS.clearDB('config');
             },
             update:e=>{
                 this.SetConfig({version:0});
@@ -663,6 +670,7 @@
                 let wh = text.split(' ').pop().split('x');
                 this.AspectRatio = wh&&Number(wh[0])/Number(wh[1]);
                 if(Module._main)this.resize();
+                this.resumeMainLoop();
             }
             else{
               let data = [
@@ -690,7 +698,7 @@
                 if(file){
                     reader.onload = e=>{
                         this.BtnMap['checkFile']( new Uint8Array(e.target.result),file.name,cb);
-                        reader.close();
+                        console.log(reader);
                     };
                     reader.readAsArrayBuffer(file);
                 }

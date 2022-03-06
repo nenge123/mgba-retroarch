@@ -9,7 +9,7 @@ var Module = new class {
     monitorRunDependencies =  function (left) {
         this.totalDependencies = Math.max(this.totalDependencies, left);
     }
-    version = 1.1;
+    version = 1.3;
     CoreName = 'mgba_config_data';
     BASEPATH = "/home/web_user/retroarch";
     USERPATH = "/userdata";
@@ -85,11 +85,6 @@ var Module = new class {
                     }
                     coreFile = null;
                 }
-                if (this.CONFIG.version != this.version){
-                    if(FS.analyzePath(this.CONFIGPATH).exists){
-                        FS.unlink(this.CONFIGPATH);
-                    }
-                }
                 if (!FS.analyzePath(this.CONFIGPATH).exists) {
                     let cfg = 'menu_mouse_enable = "true"\n' +
                         'menu_pointer_enable = "true"\n' +
@@ -99,10 +94,9 @@ var Module = new class {
                         `materialui_auto_rotate_nav_bar = "false"\n` +
                         `video_font_size = "12.000000"\n` +
                         `video_adaptive_vsync = "true"\n`+
-                        `video_shader_enable = true\n`+
+                        //`video_shader_enable = true\n`+
                         `savestate_auto_load = true\n`+
                         //`fastforward_ratio = 1.0\n`+
-                        
 
 
                         `menu_widget_scale_auto = "false"\n` +
@@ -173,6 +167,10 @@ var Module = new class {
                         `cheat_database_path = "${this.USERPATH}/cheats"\n`;
                     FS.createDataFile(`${this.BASEPATH}/userdata`, 'retroarch.cfg', cfg, !0, !0);
                 }
+                FS.createPath('/', `${this.BASEPATH}/userdata/config/mGBA`, !0, !0);
+                if(!FS.analyzePath(`${this.BASEPATH}/userdata/config/mGBA/mGBA.opt`).exists){
+                    FS.createDataFile(`${this.BASEPATH}/userdata/config/mGBA`,`mGBA.opt`,`mgba_sgb_borders = "OFF"`,!0, !0);
+                }
                 FS.createPath('/', `${this.USERPATH}/states`, !0, !0);
                 FS.createPath('/', `${this.USERPATH}/saves`, !0, !0);
                 FS.createPath('/', `${this.USERPATH}/rooms`, !0, !0);
@@ -181,7 +179,7 @@ var Module = new class {
                 this.StartRetroArch();
             });
         };
-        coredata = `((Module)=>{${coredata};;self.FS = FS;self.PATH = PATH;self.MEMFS = MEMFS;Module.LoopTime = e=>_emscripten_set_main_loop_timing(1,1);})(Module);`;
+        coredata = `((Module)=>{${coredata};;self.FS = FS;self.PATH = PATH;self.MEMFS = MEMFS;Module.LoopTime = e=>_emscripten_set_main_loop_timing(1,1);self.Browser = Browser})(Module);`;
         let script = document.createElement('script');
         script.src = window.URL.createObjectURL(new Blob([coredata], {
             type: 'text/javascript'
@@ -248,7 +246,8 @@ var Module = new class {
     async onReady() {
         let corename = this.CoreName.split('_')[0];
         if (this.CONFIG.version == this.version) return this.INSTALL_WASM();
-        this.IDBFS.clearDB('assets');
+        await this.IDBFS.clearDB('assets');
+        await this.IDBFS.clearDB('config');
         this.__Fetch({
             url: 'assets/assets.zip.js?' + Math.random(),
             error: e => console.log(e),
@@ -444,9 +443,9 @@ var Module = new class {
         }
         async clearDB(storeName) {
             if (!storeName) return this.indexedDB.deleteDatabase(this.DB_NAME);
-            var db = await this.getDB('assets');
-            var transaction = db.transaction(['assets'], "readwrite");
-            var objectStore = transaction.objectStore('assets');
+            var db = await this.getDB(storeName);
+            var transaction = db.transaction([storeName], "readwrite");
+            var objectStore = transaction.objectStore(storeName);
             objectStore.clear();
         }
         close(e) {
