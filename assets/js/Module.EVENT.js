@@ -1,9 +1,9 @@
-(function(NengeApp){
-    NengeApp.EVENT = new class{
+(function(Module){
+    Module.EVENT = new class{
         istouch = "ontouchstart" in document;
         resize(){
             if(!Module.setCanvasSize || Module.callMain) return;
-            let nav = this.$('.game-container').getBoundingClientRect(),can = Module.canvas.getBoundingClientRect();
+            let nav = this.$('.game-container').getBoundingClientRect(),can = this.canvas.getBoundingClientRect();
             let w = Math.min(window.innerWidth,document.documentElement.clientWidth,nav.width),
                h = Math.min(window.innerHeight,document.documentElement.clientHeight,nav.height);
                if(h==0) h = w==window.innerWidth ? window.innerHeight:w/can.width *can.height;
@@ -17,21 +17,67 @@
                }
                Module.setCanvasSize(w,h);
         }
+        SetKeyMap(){
+            this.KeyState = {};
+            for(let i in this.KeyMap){
+                this.KeyState[i] = 0;
+            }
+        }
+        resumeMainLoop(){
+            Module._free();
+            Module._fflush();
+            Module.LoopTime&&Module.LoopTime();
+            if(this.istouch){
+                this.BtnMap['hideui']();
+                this.$('.game-setting').classList.remove('game-tp');
+                this.$('.game-setting').innerHTML = this.HTML.translate('继续');
+                Module.callMain = true;
+            }else{
+                Module.resumeMainLoop&&Module.resumeMainLoop();
+            }
+        }
+        setLanguage(str){
+            if(!Module.callMain) return ;
+            if(this.CONFIG.lang == str) return this.$('.game-setting').click();
+            this.SetConfig({'lang':str||''});
+            this.BtnMap['reload']();
+        }
         async onReady(){
+            this.canvas = document.querySelector('.game-container canvas');
             this.on(window,'resize',e=>this.resize());
             this.on(this.$('.game-container'),'contextmenu',e=>{
-                Module.canvas.dispatchEvent(new MouseEvent('contextmenu',{}));
+                this.canvas.dispatchEvent(new MouseEvent('contextmenu',{}));
                 e.preventDefault()
             },false);
             this.on(document,'keydown',e=>{
                 if(this.$('.game-result').childNodes[0]) return;
                 e.preventDefault();
-                Module.canvas.dispatchEvent(this.KeyboardEvent(e));
+                this.canvas.dispatchEvent(this.KeyboardEvent(e));
             });
             this.on(document,'keyup',e=>{
                 if(this.$('.game-result').childNodes[0]) return;
                 e.preventDefault();
-                Module.canvas.dispatchEvent(this.KeyboardEvent(e));
+                this.canvas.dispatchEvent(this.KeyboardEvent(e));
+            });
+            this.on(document,'visibilitychange',e=>{
+                if(Module.callMain) return;
+                if (document.visibilityState === 'visible'){
+                    this.resumeMainLoop();
+                }else if(document.visibilityState === 'hidden'){
+                    Module.pauseMainLoop&&Module.pauseMainLoop();
+                }
+            });
+            this.on(window,'pagehide',e=>{
+                if(Module.callMain) return;
+                if (e.persisted) {
+                    Module.pauseMainLoop&&Module.pauseMainLoop();
+                }
+            });
+            this.on(window,'pageshow',e=>{
+                if(Module.callMain) return;
+                if (e.persisted) {
+                    this.resumeMainLoop();
+                }
             });
             let $ = e=>document.querySelector(e),
                 $$ = e=>document.querySelectorAll(e),
@@ -42,42 +88,44 @@
                     return stopEvent(e);
                 });
                 this.on($('.game-setting'),'click',e=>{
-                if(Module.callMain){
-                    try{
-                        Module.callMain(Module.arguments);
-                        delete Module.callMain;
-                        delete Module.wasmBinary;
-                        this.StartRetroArch();
-                        this.__FILE__ = {};
-                        this.NengeApp.InitKeyMap();
-                        this.resize();
-                    }catch(err){
-                        alert(err);
+                    if(Module.callMain){
+                        if(Module.callMain === true){
+                            delete Module.callMain;
+                            this.StartRetroArch();
+                            return Module.resumeMainLoop&&Module.resumeMainLoop();
+                        }
+                        try{
+                            Module.callMain(Module.arguments);
+                            this.StartRetroArch();
+                            Module.InitializedData();
+                            this.HTML.onReady();
+                            this.resize();
+                        }catch(err){
+                            alert(err);
+                        }
+                    }else{
+                        this.BtnMap['settings']();
                     }
-                }else{
-                    this.BtnMap['settings']();
-                }
-                return stopEvent(e);
-            });
+                    return stopEvent(e);
+                });
             if(this.istouch){
                 /*mobile*/
-                let  mobileEvent = ['touchstart', 'touchmove', 'touchcancel', 'touchend'],sendState = (arr)=>{
-                if(!this.KeyState) {
-                    this.KeyState = {};
-                    for(let i in this.KeyMap){
-                        this.KeyState[i] = 0;
+                this.on(document,'gesturestart',event=>stopEvent(event),{'passive': false});
+                this.on(document,'gesturechange',event=>stopEvent(event),{'passive': false});
+                this.on(document,'gestureend',event=>stopEvent(event),{'passive': false});
+                let  mobileEvent = ['touchstart', 'touchmove', 'touchcancel', 'touchend'],
+                    sendState = (arr)=>{
+                    if(!this.KeyState)this.SetKeyMap();
+                    for(var i in this.KeyMap){
+                        let k = i.replace('input_player1_','');
+                        if(arr.includes(k)){
+                            this.KeyState[i] = 1;
+                            if(this.KeyMap[i])this.keyPress(this.KeyMap[i],'keydown');
+                        }else if(this.KeyState[i] == 1){
+                            this.KeyState[i] = 0;
+                            if(this.KeyMap[i])this.keyPress(this.KeyMap[i],'keyup');
+                        }
                     }
-                };
-                for(var i in this.KeyMap){
-                    let k = i.replace('input_player1_','');
-                    if(arr.includes(k)){
-                        this.KeyState[i] = 1;
-                        if(this.KeyMap[i])this.keyPress(this.KeyMap[i],'keydown');
-                    }else if(this.KeyState[i] == 1){
-                        this.KeyState[i] = 0;
-                        if(this.KeyMap[i])this.keyPress(this.KeyMap[i],'keyup');
-                    }
-                }
                 };
                 mobileEvent.forEach(
                     val =>this.on(
@@ -112,10 +160,10 @@
                                             else keyState.push(k);
                                         }
                                     }
-                                    stopEvent(event);
                                 }
                             }
                             sendState(keyState);
+                            return stopEvent(event);
                         },
                         {'passive': false}
                     )
@@ -173,7 +221,7 @@
         }
         StartRetroArch(){
             this.$('.game-setting').classList.add('game-tp');
-            this.$('.game-setting').innerHTML = '菜单';
+            this.$('.game-setting').innerHTML = this.HTML.translate('菜单');
             if(this.istouch){
                 this.$('.game-ctrl').hidden = false
                 this.$('.game-setting').hidden = true;
@@ -196,7 +244,7 @@
                         if('serviceWorker' in navigator)navigator.serviceWorker.getRegistrations().then(registrations=>{
                             for(let i in registrations)registrations[i].unregister();
                             this.SetConfig({'do-sw':false});
-                            caches.delete('NengeApp_VBA').then(result=>ok());
+                            caches.delete('Module_VBA').then(result=>ok());
                         });
                         else ok();
                     });
@@ -246,7 +294,7 @@
                 let baiduKey = this.CONFIG.baiduKey;
                 if (baiduKey && baiduKey.id && baiduKey.key) {
                     this.ontranslate = true;
-                    this.keyPressOnce('F8');
+                    this.keyPressOnce(this.KeyMap['input_screenshot']);
                     this.BtnMap['closelist']();
                     return ;//this.BtnMap['Baidu']('POST');
                 }
@@ -279,7 +327,7 @@
                     g.append(i, CONFIG[i] || gd[i]);
                 }
                 if (method == 'GET') {
-                    g.append("callback", 'NengeApp.MSGJSON');
+                    g.append("callback", 'Module.MSGJSON');
                     g.append("sign", SparkMD5.hash(g.get('appid') + g.get('salt') + g.get('salt') + g.get('key')));
                 } else {
                     delkey = ['q', 'key'];
@@ -336,7 +384,7 @@
             },
             'canvasBlob':e=>{
                 return new Promise(compelte=>{
-                    Module.canvas.toBlob(b=>compelte(b),{type: "image/png"})
+                    this.canvas.toBlob(b=>compelte(b),{type: "image/png"})
                 });
             },
             'SparkMD5':e=>{
@@ -352,10 +400,9 @@
             },
             'keypress':e=>{
                 let keyname = e&&e.target&&e.target.getAttribute('data-name')||e;
-                    console.log(keyname);
                 if(keyname){
                     if(this.KeyMap[keyname])this.keyPressOnce(this.KeyMap[keyname]);
-                    this.BtnMap['closelist']();   
+                    this.BtnMap['closelist']();
                 }
             },
             'reload': e => {
@@ -364,20 +411,23 @@
             'hideui':e=>{
                 this.$('.game-ctrl').hidden = true;
                 this.$('.game-setting').hidden = false;
+                this.BtnMap['closelist']();
             },
             'openui':e=>{
                 this.$('.game-ctrl').hidden = false;
                 this.$('.game-setting').hidden = true;
+                this.BtnMap['closelist']();
             },
             'fullscreen':e=>{
                 Module.requestFullscreen(false);
+                this.BtnMap['closelist']();
             },
             'deletecfg':e=>{
                 this.BtnMap['closelist']();
-                if(FS.analyzePath(this.retroarchcfg).exists){
-                    FS.unlink(this.retroarchcfg);
+                if(FS.analyzePath(Module.CONFIGPATH).exists){
+                    FS.unlink(Module.CONFIGPATH);
                     FS.syncfs(e=>{
-                        this.MSG(`配置文件:${this.retroarchcfg}已被删除!`);
+                        this.MSG(`配置文件:${Module.CONFIGPATH}已被删除!`);
                     })
                 }
             },
@@ -407,26 +457,29 @@
             'settings': e => this.HTML.settings(),
             'addfile':e=>{
                 let dir = e&&e.target&&e.target.getAttribute('data-name') || 'rooms';
-                this.BtnMap['upload'](data=>{
+                this.UP_LOAD_FILE(data=>{
+                    if(!data) return;
                     for(var i in data){
-                        let path = `/userdata/${dir}/${i.split('/').pop()}`;
-                        if(FS.analyzePath(`/userdata/${dir}/${i.split('/').pop()}`).exists){
+                        let path = `${this.USERPATH}/${dir}/${i.split('/').pop()}`;
+                        if(FS.analyzePath(`${this.USERPATH}/${dir}/${i.split('/').pop()}`).exists){
                             FS.unlink(path);
                         }
-                        if(!FS.analyzePath(`/userdata/${dir}`).exists){
-                            FS.createPath('/',`/userdata/${dir}`);
+                        if(!FS.analyzePath(`${this.USERPATH}/${dir}`).exists){
+                            FS.createPath('/',`${this.USERPATH}/${dir}`);
                         }
-                        FS.createDataFile(`/userdata/${dir}`,i.split('/').pop(),data[i],!0,!0);
+                        FS.createDataFile(`${this.USERPATH}/${dir}`,i.split('/').pop(),data[i],!0,!0);
+                        delete data[i];
                     }
+                    data = null;
                     FS.syncfs(e=>this.BtnMap['filelist']());
                 });
                 this.BtnMap['closelist']();
             },
             'checkFile':(u8,name,cb)=>{
                 let head = new TextDecoder().decode(u8.slice ? u8.slice(0,6):subarray(0,6));
-                if(/^7z/.test(head))this.NengeApp.un7z(u8,name).then(e=>cb(e));
-                else if(/^Rar!/.test(head))this.NengeApp.unRAR(u8,name).then(e=>cb(e));
-                else if(/^PK/.test(head))this.NengeApp.unZip(u8,name).then(e=>cb(e));
+                if(/^7z/.test(head))Module.un7z(u8,name).then(e=>cb(e));
+                else if(/^Rar!/.test(head))Module.unRAR(u8,name).then(e=>cb(e));
+                else if(/^PK/.test(head))Module.unZip(u8,name).then(e=>cb(e));
                 else {
                     let data = {};
                     data[name] = u8;
@@ -435,19 +488,6 @@
                     data = null;
                 }
     
-            },
-            'upload':cb=>{
-                let input = document.createElement('input');
-                input.type = 'file';
-                input.onchange = e=>{
-                    let reader = new FileReader(),file = e.target.files[0];
-                    if(file){
-                        reader.onload = e=>this.BtnMap['checkFile']( new Uint8Array(e.target.result),file.name,cb);
-                        reader.readAsArrayBuffer(file);
-                    }
-                    input.remove();
-                };
-                input.click();
             },
             download:(buf, name,mime)=>{
                 let a = document.createElement('a');
@@ -472,7 +512,7 @@
                     FS.writeFile(path,new TextEncoder().encode(txt));
                     FS.syncfs(e=>{
                         this.BtnMap['closelist']();
-                        this.MSG(`path:${path} 已保存，并且同步了文件储存!`);
+                        this.HTML.syncfs(path);
                     });
                 }
             },
@@ -576,6 +616,7 @@
                 this.IDBFS.getAllKeys('userdata').then(result=>this.HTML.filelist(result));
             },
             'closelist': e => {
+                if(window.scrollY!=0)window.scrollTo(0,0);
                 let list = this.$('.game-list');
                     list.style.cssText = '';
                     if(this.ListResultHide)list.classList.remove('hideTitle');
@@ -598,9 +639,9 @@
                 if(e){
                     let txt = elm.textContent,
                     size = this.$('.game-container').getBoundingClientRect(),
-                    width = txt.length*18>size.width?'60%':txt.length*16+'px',
+                    //width = txt.length*18>size.width?'60%':txt.length*16+'px',
                     height = Math.max(Math.floor(txt.length*18/size.width)*20,200)+'px';
-                    elm.style.cssText = `width:${width};height:${height};`;
+                    elm.style.cssText = `height:${height};`;
                 }else{
                     elm.style.cssText = ``;
                 }
@@ -641,18 +682,35 @@
             }
             return false;
         };
+        UP_LOAD_FILE(cb){
+            let input = document.createElement('input');
+            input.type = 'file';
+            input.onchange = e=>{
+                let reader = new FileReader(),file = e.target.files[0];
+                if(file){
+                    reader.onload = e=>{
+                        this.BtnMap['checkFile']( new Uint8Array(e.target.result),file.name,cb);
+                        reader.close();
+                    };
+                    reader.readAsArrayBuffer(file);
+                }
+                input.remove();
+            };
+            input.click();
+        }
         CheckMessage(info,data){
             console.log(info);
             //console.log(data);
         }
         constructor(){
             let onready = e=>{
-                this.NengeApp.onReady();
+                Module.onReady();
                 this.onReady();
                 this.un(document,t,onready);
             },
             t='DOMContentLoaded';
-            this.on(document,t,onready);
+            if(document.readyState == 'complete'){let time = setInterval(()=>{if(this.HTML){onready();clearInterval(time);}},50);
+            }else this.on(document,t,onready);
         }
         $ = e=>document.querySelector(e);
         $$ = e=>document.querySelectorAll(e);
@@ -670,7 +728,7 @@
         }
         keyPress(key,type){
             let m = this.keyToCode[key.toLowerCase()];
-            Module.canvas.dispatchEvent(new KeyboardEvent(type, {'code':m||key,'key':key}));
+            this.canvas.dispatchEvent(new KeyboardEvent(type, {'code':m||key,'key':key}));
         }
         keyPressOnce(key){
             this.keyPress(key,'keydown');
@@ -699,53 +757,59 @@
         }
         RESULT = (html,bool)=>this.HTML.RESULT(html,bool);
         MSG = (html,bool)=>this.HTML.MSG(html,bool);
-        SetConfig = d=>this.NengeApp.SetConfig(d);
-        get NengeApp(){
-            return NengeApp;
+        SetConfig = d=>Module.SetConfig(d);
+        get USERPATH(){
+            return Module.USERPATH;
+        }
+        get canvas(){
+            return Module.canvas;
+        }
+        set canvas(canvans){
+            Module.canvas = canvans;
         }
         get IDBFS(){
-            return this.NengeApp.IDBFS;
+            return Module.IDBFS;
         }
         get HTML(){
-            return this.NengeApp.HTML;
+            return Module.HTML;
         }
         get KeyMap(){
-            return this.NengeApp.KeyMap;
+            return Module.KeyMap;
         }
         get keyToCode(){
-            return this.NengeApp.keyToCode;
+            return Module.keyToCode;
         }
         get CONFIG(){
-            if(!this.NengeApp.CONFIG)this.NengeApp.CONFIG = JSON.parse(localStorage.getItem(this.NengeApp.CoreName))
-            return this.NengeApp.CONFIG;
+            if(!Module.CONFIG)Module.CONFIG = JSON.parse(localStorage.getItem(Module.CoreName))
+            return Module.CONFIG;
         }
         get GameName(){
-            if(!this.NengeApp.GameLink) return "";
+            if(!this.GameLink) return "";
             return this.GameLink.split('/').pop();
         }
         get GameSys(){
-            if(!this.NengeApp.GameLink) return "";
+            if(!this.GameLink) return "";
             return this.GameName.split('.').pop();
         }
         get GameLink(){
-            if(!this.NengeApp.GameLink)this.NengeApp.GameLink = this.CONFIG['lastgame'];
-            return this.NengeApp.GameLink;
+            if(!Module.GameLink)Module.GameLink = this.CONFIG['lastgame'];
+            return Module.GameLink;
         }
         set GameLink(name){
             this.SetConfig({'lastgame':name});
-            this.NengeApp.GameLink = name;
+            Module.GameLink = name;
         }
         get CoresName(){
-            return this.NengeApp.CoresName;
+            return Module.CoresName;
         }
         set CoresName(name){
-            this.NengeApp.CoresName = name;
+            Module.CoresName = name;
         }
         get AspectRatio(){
-            return this.NengeApp.AspectRatio;
+            return Module.AspectRatio;
         }
         set AspectRatio(name){
-            this.NengeApp.AspectRatio = name;
+            Module.AspectRatio = name;
         }
     }
-})(NengeApp);
+})(Module);

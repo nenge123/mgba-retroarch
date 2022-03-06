@@ -1,7 +1,8 @@
 
 body{margin: 0px;padding: 0px;}
 .game-container{
-    position: relative;
+    position: absolute;
+    z-index: 9999;
     left: 0px;
     top: 0px;
     background: #000;
@@ -16,12 +17,18 @@ body{margin: 0px;padding: 0px;}
     max-height: 100% !important;
     max-width: 100% !important;
     margin: 0px auto;
-    left: 0px;
+    left: 0;
+    right: 0;
     top:0px;
 }
 .game-zan{
     background-color: #FFF;
     text-align: center;
+    z-index: 10001;
+    position: absolute;
+    top: 0px;
+    left: 0;
+    right: 0;
 }
 .game-zan img{
     width: 100%;
@@ -34,6 +41,7 @@ body{margin: 0px;padding: 0px;}
 }
 .game-container,
 .game-ctrl,
+.game-msg,
 .game-ctrl *{
     touch-action: none;
     -webkit-touch-callout:none;
@@ -82,6 +90,7 @@ body{margin: 0px;padding: 0px;}
 .game-list,
 .game-msg {
     transition: all .25s ease-in;
+    width: 80%;
 }
 .game-list {
     top: 100%;
@@ -89,6 +98,8 @@ body{margin: 0px;padding: 0px;}
     justify-content: space-between;
     overflow: auto;
     overflow-x: hidden;
+    touch-action:pan-y;
+    user-select: text;
     background-color: #ffffff4d;
     z-index: 10006;
     font-size: 14px;
@@ -194,7 +205,7 @@ body{margin: 0px;padding: 0px;}
     width: 100%;
     left: 0px;
     height: 20px;
-    top:calc(100% * 0.5 - 175px);
+    top:calc(100% * 0.5 - 185px);
     z-index: 10003;
 }
 .game-menu-btn {
@@ -384,6 +395,10 @@ body{margin: 0px;padding: 0px;}
     width: 100%;
 }
 @media screen and (orientation: portrait){
+    .game-list{
+        width: 100vw;
+        height: 100vh;
+    }
     .game-ctrl{
         max-height: 450px;/*calc(100vh - 100vw / 1.5); */
         top:unset;
@@ -395,5 +410,4 @@ body{margin: 0px;padding: 0px;}
     .gbc .game-ctrl{
         max-height: calc(100vh - 100vw * 0.9);
     }
-    
 }

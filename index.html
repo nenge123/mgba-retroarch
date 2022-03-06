@@ -20,13 +20,16 @@
         <div class="game-zan">
             <img src="assets/icon/zan.jpg">
             <p>赞助</p>
+            <button onclick="Module.EVENT.setLanguage('');" >click here change language to chinese</button>
             <p>仓库地址:<a href="https://gitee.com/nenge/mgba">https://github.com/nenge123/mgba</a></p>
+            <p>仓库地址:<a href="https://github.com/nenge123/mgba-retroarch/">https://github.com/nenge123/mgba-retroarch/</a></p>
+            <button onclick="Module.EVENT.setLanguage('en')" >click here change language to English</button>
         </div>
         <canvas id="canvas" width="240" height="160"></canvas>
-        <button class="game-setting" data-btn="onload" hidden>启动</button>
+        <button class="game-setting" data-btn="onload" hidden>启动/Runnig</button>
         <div class="game-ctrl" hidden>
             <div class="game-ctrl-menu">
-                <span data-btn="translate" class="game-menu-btn">翻译</span>
+                <span data-btn="translate" class="game-menu-btn">AI</span>
                 <span data-btn="statesave" class="game-menu-btn">即存</span>
                 <span data-btn="stateload" class="game-menu-btn">即读</span>
                 <span data-btn="settings" class="game-menu-btn">菜单</span>

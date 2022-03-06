@@ -1,19 +1,20 @@
-var Module = {
-    noInitialRun: true,
-    arguments: ["-v", "--menu"],
-    preRun: [],
-    postRun: [],
-    print: text => console.log(text),
-    totalDependencies: 0,
-    monitorRunDependencies: function (left) {
+
+var Module = new class {
+    noInitialRun = true;
+    arguments =  ["-v", "--menu"];
+    preRun = [];
+    postRun = [];
+    print = text => console.log(text);
+    totalDependencies = 0;
+    monitorRunDependencies =  function (left) {
         this.totalDependencies = Math.max(this.totalDependencies, left);
     }
-};
-var NengeApp = new class {
-    version = 1.0;
+    version = 1.1;
     CoreName = 'mgba_config_data';
-    __istouch = "ontouchstart" in document;
-    retroarch_cfg = "/home/web_user/retroarch/userdata/retroarch.cfg";
+    BASEPATH = "/home/web_user/retroarch";
+    USERPATH = "/userdata";
+    CONFIGPATH = `${this.BASEPATH}/userdata/retroarch.cfg`;
+    DB_NAME = "RetroArch_MGBA";
     __FILE__ = {
         "un7z.min.js": "assets/js/un7z.min.js",
         "unrar-5-m.min.js": "assets/js/unrar-5-m.min.js",
@@ -26,14 +27,17 @@ var NengeApp = new class {
     StartRetroArch() {
         this.GameLink = this.CONFIG.lastgame;
         if (this.GameLink) {
-            Module.arguments.pop();
-            Module.arguments.push(this.GameLink);
+            this.arguments.pop();
+            this.arguments.push(this.GameLink);
         }
         this.EVENT.$('.game-setting').hidden = false;
         if (this.version != this.CONFIG.version) FS.syncfs(e => this.SetConfig({'version': this.version}));
     }
-    InitKeyMap(){
-        let txt = new TextDecoder().decode(FS.readFile('/home/web_user/retroarch/userdata/retroarch.cfg'));
+    InitializedData(){
+        delete this.callMain;
+        delete this.wasmBinary;
+        this.__FILE__ = {};
+        let txt = new TextDecoder().decode(FS.readFile(this.CONFIGPATH));
         txt.split("\n").forEach(val => {
             let s = val.split('='),
                 key = s[0].replace(/^\s+?/, '').replace(/\s+?$/, ''),
@@ -43,44 +47,50 @@ var NengeApp = new class {
             }
 
         });
+        this.EVENT.SetKeyMap();
     }
     get BtnMap() {
         return this.EVENT.BtnMap;
     }
     async INSTALL_WASM(coreFile) {
-        let corename = this.CoreName.split('_')[0],
-        coredata = await this.IDBFS.getContent('coredata',`${corename}_libretro.js`);
-        //coredata = this.REPLACE_MODULE(await (await fetch(`assets/${corename}_libretro.js`)).arrayBuffer()); //
+        let corename = this.CoreName.split('_')[0];
+        let coredata = await this.IDBFS.getContent('coredata',`${corename}_libretro.js`);
+        //let coredata = this.REPLACE_MODULE(await (await fetch(`assets/${corename}_libretro.js`)).arrayBuffer()); //
         //(await this.IDBFS.getContent('coredata',`${corename}_libretro.wasm`));
         
-        Module.wasmBinary = await this.IDBFS.getContent('coredata',`${corename}_libretro.wasm`);
-        //Module.wasmBinary = new Uint8Array(await (await fetch(`assets/${corename}_libretro.wasm`)).arrayBuffer());
-        if(!coredata || !Module.wasmBinary){
+        this.wasmBinary = await this.IDBFS.getContent('coredata',`${corename}_libretro.wasm`);
+        //this.wasmBinary = new Uint8Array(await (await fetch(`assets/${corename}_libretro.wasm`)).arrayBuffer());
+        if(!coredata || !this.wasmBinary){
             this.SetConfig({version:null});
            return this.BtnMap['reload']();
         }
-        Module.canvas = document.querySelector('#canvas');
-        Module.printErr = text => {
+        this.printErr = text => {
             console.log(text);
             this.EVENT.checkLog(text);
         };
-        Module.onRuntimeInitialized = e => {
+        this.onRuntimeInitialized = e => {
             FS.createPath('/', '/userdata', !0, !0);
-            FS.createPath('/', '/home/web_user/retroarch/userdata', !0, !0);
-            FS.createPath('/', '/home/web_user/retroarch/bundle', !0, !0);
-            FS.mount(this.IDBFS, {}, '/userdata');
-            FS.mount(this.IDBFS, {}, '/home/web_user/retroarch/userdata');
-            FS.mount(this.IDBFS, {}, '/home/web_user/retroarch/bundle');
+            FS.createPath('/', `${this.BASEPATH}/userdata`, !0, !0);
+            FS.createPath('/', `${this.BASEPATH}/bundle`, !0, !0);
+            FS.mount(this.IDBFS, {}, this.USERPATH);
+            FS.mount(this.IDBFS, {}, `${this.BASEPATH}/userdata`);
+            FS.mount(this.IDBFS, {}, `${this.BASEPATH}/bundle`);
             FS.syncfs(!0, ok => {
                 if (coreFile) {
                     for (let file in coreFile) {
-                        let path = '/home/web_user/retroarch/bundle/' + file.split('/').slice(0, -1).join('/');
+                        let path = `${this.BASEPATH}/bundle/${file.split('/').slice(0, -1).join('/')}`;
                         if (!FS.analyzePath(path).exists) FS.createPath('/', path);
-                        if (!FS.analyzePath('/home/web_user/retroarch/bundle/' + file).exists) FS.createDataFile(path, file.split('/').pop(), coreFile[file], !0, !0);
+                        if (!FS.analyzePath(`${this.BASEPATH}/bundle/${file}`).exists) FS.createDataFile(path, file.split('/').pop(), coreFile[file], !0, !0);
                         delete coreFile[file];
                     }
+                    coreFile = null;
                 }
-                if (!FS.analyzePath(this.retroarch_cfg).exists) {
+                if (this.CONFIG.version != this.version){
+                    if(FS.analyzePath(this.CONFIGPATH).exists){
+                        FS.unlink(this.CONFIGPATH);
+                    }
+                }
+                if (!FS.analyzePath(this.CONFIGPATH).exists) {
                     let cfg = 'menu_mouse_enable = "true"\n' +
                         'menu_pointer_enable = "true"\n' +
                         `menu_driver = "glui"\n`
@@ -89,6 +99,13 @@ var NengeApp = new class {
                         `materialui_playlist_icons_enable = "false"\n` +
                         `materialui_auto_rotate_nav_bar = "false"\n` +
                         `video_font_size = "12.000000"\n` +
+                        `video_adaptive_vsync = "true"\n`+
+                        `video_shader_enable = true\n`+
+                        `savestate_auto_load = true\n`+
+                        `fastforward_ratio = 1.0\n`+
+                        
+
+
                         `menu_widget_scale_auto = "false"\n` +
                         'materialui_icons_enable = false\n' +
                         `menu_scale_factor = "2.000000"\n` +
@@ -151,28 +168,30 @@ var NengeApp = new class {
                         `block_sram_overwrite = "false"\n` +
                         `savestate_file_compression = "false"\n` +
                         `save_file_compression = "false"\n` +
-                        `savefile_directory = "/userdata/saves"\n` +
-                        `savestate_directory = "/userdata/states"\n` +
-                        `screenshot_directory = "/userdata/screenshots"\n` +
-                        `system_directory = "/home/web_user/retroarch/bundle/system"\n` +
-                        `rgui_browser_directory = "/userdata/rooms"\n` +
-                        `core_assets_directory = "/userdata/rooms/downloads"\n` +
-                        `cheat_database_path = "/userdata/cheats"\n`;
-                    FS.createDataFile('/home/web_user/retroarch/userdata', 'retroarch.cfg', cfg, !0, !0);
+                        `savefile_directory = "${this.USERPATH}/saves"\n` +
+                        `savestate_directory = "${this.USERPATH}/states"\n` +
+                        `screenshot_directory = "${this.USERPATH}/screenshots"\n` +
+                        `system_directory = "${this.BASEPATH}/bundle/system"\n` +
+                        `rgui_browser_directory = "${this.USERPATH}/rooms"\n` +
+                        `core_assets_directory = "${this.USERPATH}/rooms/downloads"\n` +
+                        `cheat_database_path = "${this.USERPATH}/cheats"\n`;
+                    FS.createDataFile(`${this.BASEPATH}/userdata`, 'retroarch.cfg', cfg, !0, !0);
                 }
-                FS.createPath('/', '/userdata/states', !0, !0);
-                FS.createPath('/', '/userdata/saves', !0, !0);
-                FS.createPath('/', '/userdata/rooms', !0, !0);
-                FS.createPath('/', '/userdata/rooms/downloads', !0, !0);
-                FS.createPath('/', '/userdata/screenshots', !0, !0);
+                FS.createPath('/', `${this.USERPATH}/states`, !0, !0);
+                FS.createPath('/', `${this.USERPATH}/saves`, !0, !0);
+                FS.createPath('/', `${this.USERPATH}/rooms`, !0, !0);
+                FS.createPath('/', `${this.USERPATH}/rooms/downloads`, !0, !0);
+                FS.createPath('/', `${this.USERPATH}/screenshots`, !0, !0);
                 this.StartRetroArch();
             });
         };
+        coredata = `((Module)=>{${coredata};;self.FS = FS;self.PATH = PATH;self.MEMFS = MEMFS;Module.LoopTime = e=>_emscripten_set_main_loop_timing(1,1);})(Module);`;
         let script = document.createElement('script');
         script.src = window.URL.createObjectURL(new Blob([coredata], {
             type: 'text/javascript'
         }));
         script.onload = async e => {
+            coredata = null;
             window.URL.revokeObjectURL(script.src);
         };
         document.body.appendChild(script);
@@ -201,20 +220,19 @@ var NengeApp = new class {
         ).replace(
             /function _fd_write\(fd,\s?iov,\s?iovcnt,\s?pnum\)\s?\{\s?\n?\s*try\s?\{\n?\s*var stream\s?=\s?SYSCALLS\.getStreamFromFD\(fd\);\n?\s*var\s?num\s?=\s?SYSCALLS\.doWritev\(stream,\s?iov,\s?iovcnt\);/,
             'function _fd_write(fd,iov,iovcnt,pnum){try{var stream=SYSCALLS.getStreamFromFD(fd);var num = SYSCALLS.doWritev(stream, iov, iovcnt);' +
-            'if(stream&&stream.node&&NengeApp.IDBFS.DB_STORE_MAP[stream.node.mount.mountpoint]){'
+            'if(stream&&stream.node&&Module.IDBFS.DB_STORE_MAP[stream.node.mount.mountpoint]){'
             // num 是储存字符大小
             +
             'if(stream.position==num){' +
-            'if(NengeApp.EVENT.ontranslate&&/\.png$/.test(stream.path)){' +
-            'NengeApp.EVENT.translateimgpath = stream.path;' +
-            'clearTimeout(NengeApp.EVENT.syncfsTimer);NengeApp.EVENT.syncfsTimer = setTimeout(e=>NengeApp.EVENT.BtnMap["Baidu"]("POST"),1000);' +
+            'if(Module.EVENT.ontranslate&&/\.png$/.test(stream.path)){' +
+            'Module.EVENT.translateimgpath = stream.path;' +
+            'clearTimeout(Module.EVENT.syncfsTimer);Module.EVENT.syncfsTimer = setTimeout(e=>Module.EVENT.BtnMap["Baidu"]("POST"),1000);' +
             '}else if(/\.srm$/.test(stream.path)||/\.rtc$/.test(stream.path)){console.log(stream.path);' +
-            'clearTimeout(NengeApp.EVENT.syncfsTimer);NengeApp.EVENT.syncfsTimer = setTimeout(e=>FS.syncfs(e=>Module.HTML.syncfs(stream.path)),500);' +
+            'clearTimeout(Module.EVENT.syncfsTimer);Module.EVENT.syncfsTimer = setTimeout(e=>FS.syncfs(e=>Module.HTML.syncfs(stream.path)),500);' +
             '}' +
             '}'
             //+'console.log(stream.position==num);'
-            +
-            '};'
+            +'}'
             /*).replace(
                 /ret\s?\+=\s?curr\s*\n?\}\s*return ret/,
                 'ret+=curr}'
@@ -223,7 +241,7 @@ var NengeApp = new class {
                         +'clearTimeout(Module.syncfsTimer);Module.syncfsTimer = setTimeout(e=>FS.syncfs(e=>Module.HTML.syncfs(stream.path)),50);'
                     +'}'
                 +'}else{'
-                    +'console.log(iov);NengeApp.EVENT.CheckMessage('
+                    +'console.log(iov);Module.EVENT.CheckMessage('
                         +'new TextDecoder().decode(new Uint8Array(HEAP8.subarray(HEAP32[iov>>2],HEAP32[iov>>2]+HEAP32[iov+4>>2])))'
                         //+'new TextDecoder().decode(new Uint8Array(HEAP8.subarray(HEAP32[iov+8>>2],HEAP32[iov+8>>2]+HEAP32[iov+12>>2])))'
                     +');'
@@ -335,12 +353,12 @@ var NengeApp = new class {
         return buf;
     }
     IDBFS = new class {
-        DB_NAME = "RetroArch_MGBA";
-        DB_STORE_NAME = "FILE_DATA";
-        DB_STORE_MAP = {
-            '/home/web_user/retroarch/userdata': 'config',
-            '/home/web_user/retroarch/bundle': 'assets',
-            '/userdata': 'userdata',
+        DB_STORE_MAP = {};
+        constructor(Module){
+            this.DB_STORE_MAP[Module.USERPATH] = 'userdata';
+            this.DB_STORE_MAP[`${Module.BASEPATH}/userdata`] = 'config';
+            this.DB_STORE_MAP[`${Module.BASEPATH}/bundle`] = 'assets';
+            this.DB_NAME = Module.DB_NAME;
         };
         get indexedDB() {
             let ret = window.indexedDB || window.mozIndexedDB || window.webkitIndexedDB;
@@ -430,7 +448,7 @@ var NengeApp = new class {
         }
         async clearDB(storeName) {
             if (!storeName) return this.indexedDB.deleteDatabase(this.DB_NAME);
-            var db = await Module.IDBFS.getDB('assets');
+            var db = await this.getDB('assets');
             var transaction = db.transaction(['assets'], "readwrite");
             var objectStore = transaction.objectStore('assets');
             objectStore.clear();
@@ -701,7 +719,7 @@ var NengeApp = new class {
                 }
             });
         }
-    };
+    }(this);
     async un7z(buf, name) {
         let url = await this.__getFile('un7z.min.js');
         return new Promise((ok, erro) => {
