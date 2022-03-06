@@ -93,16 +93,15 @@ var Module = new class {
                 if (!FS.analyzePath(this.CONFIGPATH).exists) {
                     let cfg = 'menu_mouse_enable = "true"\n' +
                         'menu_pointer_enable = "true"\n' +
-                        `menu_driver = "glui"\n`
+                        `menu_driver = "glui"\n`+
                         //+'materialui_show_nav_bar = false\n'
-                        +
                         `materialui_playlist_icons_enable = "false"\n` +
                         `materialui_auto_rotate_nav_bar = "false"\n` +
                         `video_font_size = "12.000000"\n` +
                         `video_adaptive_vsync = "true"\n`+
                         `video_shader_enable = true\n`+
                         `savestate_auto_load = true\n`+
-                        `fastforward_ratio = 1.0\n`+
+                        //`fastforward_ratio = 1.0\n`+
                         
 
 
@@ -117,9 +116,8 @@ var Module = new class {
                         `menu_show_quit_retroarch = "false"\n` +
                         `menu_show_overlays = "false"\n` +
                         `menu_show_online_updater = "false"\n` +
-                        `settings_show_accessibility = "false"\n`
+                        `settings_show_accessibility = "false"\n`+
                         //+`settings_show_user_interface = "false"\n`
-                        +
                         `settings_show_user = "false"\n` +
                         `settings_show_recording = "false"\n` +
                         `settings_show_power_management = "false"\n` +
@@ -133,16 +131,14 @@ var Module = new class {
                         `settings_show_achievements = "false"\n` +
                         `settings_show_drivers = "false"\n` +
                         `settings_show_configuration = "false"\n` +
-                        `settings_show_latency = "false"\n`
+                        `settings_show_latency = "false"\n`+
                         //+`settings_show_frame_throttle = "false"\n`
-                        +
                         `settings_show_saving = "false"\n` +
                         `camera_allow = "false"\n` +
                         `camera_driver = "null"\n` +
                         `camera_device = ""\n` +
-                        `input_max_users = "1"\n`
+                        `input_max_users = "1"\n`+
                         //+`bundle_assets_extract_enable = "false"\n`
-                        +
                         `quick_menu_show_information = "false"\n` +
                         `quick_menu_show_recording = "false"\n` +
                         `quick_menu_show_reset_core_association = "false"\n` +
