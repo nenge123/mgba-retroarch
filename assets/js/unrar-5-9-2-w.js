@@ -243,7 +243,7 @@ function Na(a) {
 function Oa() {
   return Na("data:application/octet-stream;base64,")
 }
-var L = "libunrar.wasm";
+var L = "unrar-5-9-2-w.wasm";
 if (!Oa()) {
   var Pa = L;
   L = c.locateFile ? c.locateFile(Pa, p) : p + Pa

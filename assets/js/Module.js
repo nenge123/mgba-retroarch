@@ -24,7 +24,44 @@ var Module = new class {
         "mgba_libretro.js": null,
         "mgba_libretro.wasm": null,
     };
-    StartRetroArch() {
+    async StartRetroArch() {
+        if(location.search){
+            let search = location.search.replace(/^\?/,'').split('&'),
+                data = {};
+            for(let i=0;i<search.length;i++){
+                let m = search[i].split('=');
+                if(m[0]&&m[1])data[m[0]] = decodeURIComponent(m[1]);
+            }
+            if(data['game']){
+                self.GameLink = data['game'];
+            }
+        }
+        if(typeof self.GameLink == 'string'){
+            let path = `${this.USERPATH}/rooms/`+self.GameLink.split('/').pop();
+            if(this.CONFIG.files[self.GameLink]){
+                this.SetConfig({lastgame:this.CONFIG.files[self.GameLink]});
+            }else if(FS.analyzePath(path).exists){
+                this.SetConfig({lastgame:path});
+            }else{
+                try{
+                    let stream = await fetch(self.GameLink);
+                    if(stream.status !='404'){
+                        let buffer = new Uint8Array(await (stream).arrayBuffer());
+                        if(buffer&&buffer.byteLength>0){
+                            let returnpath = await this.CheckLoadFile(buffer,path);
+                            if(returnpath){
+                                this.CONFIG.version = null;
+                                if(!this.CONFIG.files)this.CONFIG.files = {};
+                                this.CONFIG.files[self.GameLink] = returnpath;
+                                this.SetConfig({files:this.CONFIG.files,lastgame:returnpath});
+                            }
+                        }
+                    }
+                }catch(err){
+                    alert(err);
+                }
+            }
+        }
         this.GameLink = this.CONFIG.lastgame;
         if (this.GameLink) {
             this.arguments.pop();
@@ -53,10 +90,13 @@ var Module = new class {
     get BtnMap() {
         return this.EVENT.BtnMap;
     }
-    CreateDataFile(path,data){
+    CreateDataFile(path,data,bool){
         let dir = path.split('/').slice(0,-1).join('/');
         if (!FS.analyzePath(dir).exists) FS.createPath('/', dir);
-        if (!FS.analyzePath(path).exists) FS.createDataFile(dir, path.split('/').pop(),data, !0, !0);
+        if(bool){
+            if (FS.analyzePath(path).exists)FS.unlink(path);
+            FS.createDataFile(dir, path.split('/').pop(),data, !0, !0);
+        }else if (!FS.analyzePath(path).exists) FS.createDataFile(dir, path.split('/').pop(),data, !0, !0);
     }
     async INSTALL_WASM(coreFile) {
         let corename = this.CoreName.split('_')[0];
@@ -200,16 +240,17 @@ var Module = new class {
                 this.StartRetroArch();
             });
         };
-        coredata = `((Module)=>{`+
-                        `${coredata};`+
-                        `FS.PATH = PATH;`+
-                        `FS.MEMFS = MEMFS;`+
-                        `self.FS = FS;`+
-                        `Module.LoopTime = e=>_emscripten_set_main_loop_timing(1,1);`+
-                        `Module.RA = RA;`+
-                        `Module.FS = FS;`+
-                        `Module._RWebAudioInit = _RWebAudioInit;`+
-                        `Module.Browser = Browser`+
+        coredata = `((Module)=>{\n`+
+                        `${coredata};\n`+
+                        `FS.PATH = PATH;\n`+
+                        `FS.MEMFS = MEMFS;\n`+
+                        `self.FS = FS;\n`+
+                        `Module.LoopTime = e=>_emscripten_set_main_loop_timing(1,1);\n`+
+                        `Module.RA = RA;\n`+
+                        `Module.FS = FS;\n`+
+                        `Module._RWebAudioInit = _RWebAudioInit;\n`+
+                        `Module.Browser = Browser;\n`+
+                        `Module._emscripten_set_main_loop_timing = _emscripten_set_main_loop_timing;\n`+
                     `})(Module);`;
         let script = document.createElement('script');
         script.src = window.URL.createObjectURL(new Blob([coredata], {
@@ -746,6 +787,29 @@ var Module = new class {
             });
         }
     }(this);
+    async CheckLoadFile(u8,path){
+        console.log(u8);
+        let head = new TextDecoder().decode(u8.slice ? u8.slice(0,6):subarray(0,6)),data;
+        if(/^7z/.test(head))data = await Module.un7z(u8);
+        else if(/^Rar!/.test(head))data = await Module.unRAR(u8);
+        else if(/^PK/.test(head))data = await Module.unZip(u8);
+        else {
+            this.CreateDataFile(path,u8);
+            return path;
+        }
+        if(data){
+            let returnpath;
+            for(var i in data){
+                let newpath = (`${this.USERPATH}/rooms/`+i.split('/').pop()).toLowerCase();
+                if(!returnpath&&(/\.(gb|gbc|gba)$/i).test(newpath))returnpath = newpath;
+                this.CreateDataFile(newpath,data[i]);
+                delete data[i];
+            }
+            data = null;
+            if(returnpath)return returnpath;
+        }
+        return ;
+    }
     async un7z(buf, name) {
         let url = await this.__getFile('un7z.min.js');
         return new Promise((ok, erro) => {
@@ -775,20 +839,18 @@ var Module = new class {
     async unRAR(content, name, password) {
         let str = new TextDecoder().decode(new Uint8Array(content.subarray(0, 8)));
         let url;
+        console.log(str);
         if (/Rar!$/.test(str)) url = await this.__getFile('unrar-5-m.min.js'); // rar >=5
-        else url = await this.__getFile('unrar-5-m.js'); // rar <=4.0
-        name = name + ".rar" || 'test.rar';
+        else url = await this.__getFile('unrar-5-m.min.js'); // rar <=4.0
+        name = name&&name + ".rar" || 'test.rar';
+        password = password||"";
         return new Promise((ok, erro) => {
             let w = new Worker(url);
             w.onmessage = e => {
                 ok(e.data);
                 w.terminate();
             };
-            w.addEventListener('error', e => {
-                console.log(e);
-
-            });
-            w.onerror = async e => {
+            w.onerror = e => {
                 if (e.message == "Uncaught Missing password" || e.message == "Uncaught File CRC error") {
                     this.HTML.RAR_HTML(e.message);
                     this.BtnMap['unrar'] = e => {
@@ -796,13 +858,7 @@ var Module = new class {
                         if (!password) return;
                         this.BtnMap['unrar'] = null;
                         this.BtnMap['closelist']();
-                        w.postMessage({
-                            "data": [{
-                                name,
-                                content
-                            }],
-                            password
-                        });
+                        w.postMessage({"data": [{name,content}],password});
                     }
                     this.BtnMap['exitrar'] = e => {
                         w.terminate();
@@ -813,13 +869,7 @@ var Module = new class {
                     w.terminate();
                 }
             };
-            w.postMessage({
-                "data": [{
-                    name,
-                    content
-                }],
-                password
-            });
+            w.postMessage({"data": [{name,content}],password});
         });
     }
     KeyMap = {

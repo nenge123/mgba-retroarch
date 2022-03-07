@@ -2,7 +2,7 @@
     Module.EVENT = new class{
         istouch = "ontouchstart" in document;
         resize(){
-            if(!Module.setCanvasSize) return;
+            if(typeof Module.setCanvasSize != "function" || typeof Module.callMain =="function") return;
             let nav = this.$('.game-container').getBoundingClientRect(),can = this.canvas.getBoundingClientRect();
             let w = Math.min(window.innerWidth,document.documentElement.clientWidth,nav.width),
                h = Math.min(window.innerHeight,document.documentElement.clientHeight,nav.height),
@@ -25,23 +25,23 @@
             }
         }
         resumeMainLoop(){
-            //fix mobile error
             if(Module.callMain) return;
             Module.pauseMainLoop&&Module.pauseMainLoop();
-            Module._free();
-            Module._fflush();
-            //Module.LoopTime&&Module.LoopTime();
+            Module.resumeMainLoop&&Module.resumeMainLoop();
             if(this.istouch){
-                this.BtnMap['hideui']();
-                this.$('.game-setting').classList.remove('game-tp');
-                this.$('.game-setting').innerHTML = this.HTML.translate('继续');
-                Module.callMain = true;
-            }else{
-                Module.resumeMainLoop&&Module.resumeMainLoop();
+                setTimeout(()=>{
+                    Module._free();
+                    Module._fflush();
+                    Module.pauseMainLoop&&Module.pauseMainLoop();
+                    this.BtnMap['hideui']();
+                    this.$('.game-setting').classList.remove('game-tp');
+                    this.$('.game-setting').innerHTML = this.HTML.translate('继续');
+                    Module.callMain = true;
+                },500);
             }
         }
         setLanguage(str){
-            if(this.$('.game-setting').hidden) return ;
+            if(this.$('.game-setting').hidden || !Module.callMain) return ;
             this.SetConfig({'lang':str||''});
             this.$('.game-setting').click();
         }
@@ -65,8 +65,10 @@
             this.on(document,'visibilitychange',e=>{
                 if(Module.callMain) return;
                 if (document.visibilityState === 'visible'){
-                    this.resumeMainLoop();
+                    Module.resumeMainLoop&&Module.resumeMainLoop();
+                    if(this.istouch)setTimeout(()=>this.resumeMainLoop(),1000);
                 }else if(document.visibilityState === 'hidden'){
+                    this.BtnMap['closelist']();
                     Module.pauseMainLoop&&Module.pauseMainLoop();
                 }
             });
@@ -95,7 +97,7 @@
                 });
                 this.on($('.game-setting'),'click',e=>{
                     if(Module.callMain){
-                        if(typeof Module.callMain == 'function'){
+                        if(typeof Module.callMain === 'function'){
                             try{
                                 Module.callMain(Module.arguments);
                                 this.StartRetroArch();
@@ -107,14 +109,10 @@
                             }
 
                         }else if(Module.callMain === true){
-                            //fix mobile
+                            Module.pauseMainLoop&&Module.pauseMainLoop();
                             delete Module.callMain;
                             this.StartRetroArch();
-                            if(!Module.RA.context || Module.RA.state=="closed"){
-                                if(Module._RWebAudioInit(this.KeyMap['audio_latency'])){
-                                    return ;
-                                }
-                            }
+                            //fix mobile
                             Module.resumeMainLoop&&Module.resumeMainLoop();
                         } 
                     }else{
@@ -124,9 +122,25 @@
                 });
             if(this.istouch){
                 /*mobile*/
-                this.on(document,'gesturestart',event=>stopEvent(event),{'passive': false});
-                this.on(document,'gesturechange',event=>stopEvent(event),{'passive': false});
-                this.on(document,'gestureend',event=>stopEvent(event),{'passive': false});
+                let Stopscale = event=>{
+                    return stopEvent(event);
+                };
+                /*
+                [this.$('.game-ctrl'),this.$('.game-msg')].forEach(elm=>{
+                    this.on(elm,'gesturestart',Stopscale,{'passive': false});
+                    this.on(elm,'gesturechange',Stopscale,{'passive': false});
+                    this.on(elm,'gestureend',Stopscale,{'passive': false});
+                });
+                this.on(document,'touchstart',event=>{
+                    let now = new Date()['valueOf']();
+                    this.docTime = now;
+                    if(event.scale!=1)alert(event.scale);
+                    return false;
+                },{'passive': false});
+                */
+                this.on(document,'gesturestart',Stopscale,{'passive': false});
+                this.on(document,'gesturechange',Stopscale,{'passive': false});
+                this.on(document,'gestureend',Stopscale,{'passive': false});
                 let  mobileEvent = ['touchstart', 'touchmove', 'touchcancel', 'touchend'],
                     sendState = (arr)=>{
                     if(!this.KeyState)this.SetKeyMap();
@@ -228,8 +242,8 @@
                     if (type != "touchend" || elm == event.target) {
                         btn = btn.toLowerCase();
                         if(this.BtnMap[btn]) this.BtnMap[btn](event);
+                        return stopEvent(event,1);
                     }
-                    return stopEvent(event,1);
                 }
             });
         }
@@ -478,14 +492,7 @@
                 this.UP_LOAD_FILE(data=>{
                     if(!data) return;
                     for(var i in data){
-                        let path = `${this.USERPATH}/${dir}/${i.split('/').pop()}`;
-                        if(FS.analyzePath(`${this.USERPATH}/${dir}/${i.split('/').pop()}`).exists){
-                            FS.unlink(path);
-                        }
-                        if(!FS.analyzePath(`${this.USERPATH}/${dir}`).exists){
-                            FS.createPath('/',`${this.USERPATH}/${dir}`);
-                        }
-                        FS.createDataFile(`${this.USERPATH}/${dir}`,i.split('/').pop(),data[i],!0,!0);
+                        this.CreateDataFile(`${this.USERPATH}/${dir}/${i.split('/').pop()}`,data[i],!0);
                         delete data[i];
                     }
                     data = null;
@@ -779,6 +786,7 @@
         RESULT = (html,bool)=>this.HTML.RESULT(html,bool);
         MSG = (html,bool)=>this.HTML.MSG(html,bool);
         SetConfig = d=>Module.SetConfig(d);
+        CreateDataFile = (path,data)=>Module.CreateDataFile(path,data);
         get USERPATH(){
             return Module.USERPATH;
         }

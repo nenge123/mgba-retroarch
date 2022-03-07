@@ -1,5 +1,6 @@
 
-body{margin: 0px;padding: 0px;}
+body{margin: 0px;padding: 0px;overflow: hidden;
+    touch-action: none;}
 .game-container{
     position: absolute;
     z-index: 9999;
@@ -9,6 +10,7 @@ body{margin: 0px;padding: 0px;}
     width: 100vw;
     height: 100vh;
     overflow: hidden;
+    touch-action: none;
 }
 .game-container canvas{
     position: absolute;
@@ -39,7 +41,8 @@ body{margin: 0px;padding: 0px;}
 .game-zan[hidden]{
     display: none;
 }
-.game-container,
+.game-container canvas,
+.game-doing,
 .game-ctrl,
 .game-msg,
 .game-ctrl *{
@@ -96,9 +99,10 @@ body{margin: 0px;padding: 0px;}
     top: 100%;
     display: flex;
     justify-content: space-between;
-    overflow: auto;
-    overflow-x: hidden;
-    touch-action:pan-y;
+    overflow: hidden;
+    touch-action:none;
+    width: 100%;
+    height: 100%;
     user-select: text;
     background-color: #ffffff4d;
     z-index: 10006;
@@ -126,11 +130,16 @@ body{margin: 0px;padding: 0px;}
     margin: 0px 5px 0px 0px;
     padding: 10px 35px 10px 5px;
     flex-grow: 1;
-    overflow: auto !important;
+    overflow: hidden;
+    overflow-y: auto !important;
     width: calc(100% - 80px);
-    overflow-x: hidden !important;
     font-size: 12px;
-    touch-action:auto !important;
+
+}
+.game-result,
+.game-result *{
+    user-select:unset !important;
+    touch-action:pan-y !important;
 }
 .game-doing{
     display: flex;
@@ -176,7 +185,7 @@ body{margin: 0px;padding: 0px;}
     height: 60vh;
     width: calc(100% - 30px);
     user-select: text !important;
-    touch-action: auto;
+    touch-action: pan-y,pan-x !important;
     margin: 5px auto;
     display: block;
     padding: 5px;
