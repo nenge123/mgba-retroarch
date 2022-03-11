@@ -695,21 +695,40 @@
             else{
               let data = [
                   // /^\[INFO\]\s?\[SRAM\]:\s?Saved\s?successfully\s?to/i,
-                  ///^\[INFO\]\s\[State\]:\sSaving\state\s/,
-                  // /^\[INFO\]\s\[State\]:\sFile\salready\sexists\./i,
+                  /^\[INFO\]\s\[State\]:\sSaving\state\s/,
+                  /^\[INFO\]\s\[State\]:\sFile\salready\sexists\./i,
                   ///^\[INFO\] \[State\]: Loading state "/,
-                  // /^\[INFO\]\s\[State\]:\sSaving\sstate\s"\/userdata\/states\//i,
+                  /^\[INFO\]\s\[State\]:\sSaving\sstate\s"\/userdata\/states\//i,
                   /Saved\snew\sCONFIG\sto/i,
                   // /\[INFO\]\sApplying\scheat\schanges\./i
                   ];
               for(let i=0;i<data.length;i++)if(data[i].test(text)){
+                  let file = text.match(/\"(.+?)\"/);
+                  if(file&&file[1])this.syncfsFile = file[1];
                   clearTimeout(this.syncfsTimer);
-                  this.syncfsTimer = setTimeout(e=>FS.syncfs(e=>this.HTML.syncfs(text.match(/\"(.+?)\"\.?/)[1])),1500);
+                  this.syncfsTimer = setTimeout(e=>FS.syncfs(e=>this.HTML.syncfs(this.syncfsFile||'')),1500);
                   break;
               }
             }
             return false;
         };
+        CHECK_SAVE(stream,num){
+            if(stream&&stream.node&&Module.IDBFS.DB_STORE_MAP[stream.node.mount.mountpoint]){
+            // num 是储存字符大小
+                if(stream.position==num){
+                    if(this.ontranslate&&/\.png$/.test(stream.path)){
+                        this.translateimgpath = stream.path;
+                        clearTimeout(this.syncfsTimer);
+                        this.syncfsTimer = setTimeout(e=>this.BtnMap["Baidu"]("POST"),1000);
+                    }else if(/\.srm$/.test(stream.path)||/\.rtc$/.test(stream.path)){console.log(stream.path);
+                        clearTimeout(this.syncfsTimer);
+                        this.syncfsTimer = setTimeout(e=>FS.syncfs(e=>Module.HTML.syncfs(stream.path)),500);
+                    }
+                }
+            }else if(stream.path.match(/\.state$/)){
+                console.log(stream);
+            }
+        }
         UP_LOAD_FILE(cb){
             let input = document.createElement('input');
             input.type = 'file';

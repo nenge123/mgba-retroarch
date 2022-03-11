@@ -1,15 +1,15 @@
-
 var Module = new class {
     noInitialRun = true;
-    arguments =  ["-v", "--menu"];
+    arguments = ["-v", "--menu"];
     preRun = [];
     postRun = [];
     print = text => console.log(text);
     totalDependencies = 0;
-    monitorRunDependencies =  function (left) {
+    monitorRunDependencies = function(left) {
         this.totalDependencies = Math.max(this.totalDependencies, left);
     }
-    version = 2.1;
+    version = 2.2;
+    fileversion = 2.1;
     CoreName = 'mgba_config_data';
     BASEPATH = "/home/web_user/retroarch";
     USERPATH = "/userdata";
@@ -25,39 +25,39 @@ var Module = new class {
         "mgba_libretro.wasm": null,
     };
     async StartRetroArch() {
-        if(location.search){
-            let search = location.search.replace(/^\?/,'').split('&'),
+        if (location.search) {
+            let search = location.search.replace(/^\?/, '').split('&'),
                 data = {};
-            for(let i=0;i<search.length;i++){
+            for (let i = 0; i < search.length; i++) {
                 let m = search[i].split('=');
-                if(m[0]&&m[1])data[m[0]] = decodeURIComponent(m[1]);
+                if (m[0] && m[1]) data[m[0]] = decodeURIComponent(m[1]);
             }
-            if(data['game']){
+            if (data['game']) {
                 self.GameLink = data['game'];
             }
         }
-        if(typeof self.GameLink == 'string'){
-            let path = `${this.USERPATH}/rooms/`+self.GameLink.split('/').pop();
-            if(this.CONFIG.files[self.GameLink]){
-                this.SetConfig({lastgame:this.CONFIG.files[self.GameLink]});
-            }else if(FS.analyzePath(path).exists){
-                this.SetConfig({lastgame:path});
-            }else{
-                try{
+        if (typeof self.GameLink == 'string') {
+            let path = `${this.USERPATH}/rooms/` + self.GameLink.split('/').pop();
+            if (this.CONFIG.files[self.GameLink]) {
+                this.SetConfig({ lastgame: this.CONFIG.files[self.GameLink] });
+            } else if (FS.analyzePath(path).exists) {
+                this.SetConfig({ lastgame: path });
+            } else {
+                try {
                     let stream = await fetch(self.GameLink);
-                    if(stream.status !='404'){
+                    if (stream.status != '404') {
                         let buffer = new Uint8Array(await (stream).arrayBuffer());
-                        if(buffer&&buffer.byteLength>0){
-                            let returnpath = await this.CheckLoadFile(buffer,path);
-                            if(returnpath){
+                        if (buffer && buffer.byteLength > 0) {
+                            let returnpath = await this.CheckLoadFile(buffer, path);
+                            if (returnpath) {
                                 this.CONFIG.version = null;
-                                if(!this.CONFIG.files)this.CONFIG.files = {};
+                                if (!this.CONFIG.files) this.CONFIG.files = {};
                                 this.CONFIG.files[self.GameLink] = returnpath;
-                                this.SetConfig({files:this.CONFIG.files,lastgame:returnpath});
+                                this.SetConfig({ files: this.CONFIG.files, lastgame: returnpath });
                             }
                         }
                     }
-                }catch(err){
+                } catch (err) {
                     alert(err);
                 }
             }
@@ -69,9 +69,8 @@ var Module = new class {
         }
         this.EVENT.$('.game-setting').hidden = false;
         this.EVENT.$('.game-setting').innerHTML = this.HTML.translate('启动');
-        if (this.version != this.CONFIG.version) FS.syncfs(e => this.SetConfig({'version': this.version}));
     }
-    InitializedData(){
+    InitializedData() {
         delete this.callMain;
         delete this.wasmBinary;
         this.__FILE__ = {};
@@ -90,24 +89,27 @@ var Module = new class {
     get BtnMap() {
         return this.EVENT.BtnMap;
     }
-    CreateDataFile(path,data,bool){
-        let dir = path.split('/').slice(0,-1).join('/');
-        if (!FS.analyzePath(dir).exists) FS.createPath('/', dir);
-        if(bool){
-            if (FS.analyzePath(path).exists)FS.unlink(path);
-            FS.createDataFile(dir, path.split('/').pop(),data, !0, !0);
-        }else if (!FS.analyzePath(path).exists) FS.createDataFile(dir, path.split('/').pop(),data, !0, !0);
+    CreateDataFile(path, data, bool) {
+        let dir = path.split('/').slice(0, -1).join('/');
+        if (!FS.analyzePath(dir).exists){
+            let pdir = dir.split('/').slice(0, -1).join('/');
+            if (!FS.analyzePath(pdir).exists)FS.createPath('/', pdir,!0,!0);
+            console.log(pdir);
+            FS.createPath('/', dir,!0,!0);
+        }
+        if (bool) {
+            if (FS.analyzePath(path).exists) FS.unlink(path);
+            FS.createDataFile(dir, path.split('/').pop(), data, !0, !0);
+        } else if (!FS.analyzePath(path).exists) FS.createDataFile(dir, path.split('/').pop(), data, !0, !0);
     }
-    async INSTALL_WASM(coreFile) {
+    async INSTALL_WASM() {
         let corename = this.CoreName.split('_')[0];
-        let coredata = await this.IDBFS.getContent('coredata',`${corename}_libretro.js`);
-        //let coredata = this.REPLACE_MODULE(await (await fetch(`assets/${corename}_libretro.js`)).arrayBuffer()); //
+        //let coredata = this.REPLACE_MODULE(await this.IDBFS.getContent('coredata', `${corename}_libretro.js`));
+        let coredata = this.REPLACE_MODULE(await (await fetch(`assets/${corename}_libretro.js`)).arrayBuffer()); //
         //(await this.IDBFS.getContent('coredata',`${corename}_libretro.wasm`));
-        
-        this.wasmBinary = await this.IDBFS.getContent('coredata',`${corename}_libretro.wasm`);
-        //this.wasmBinary = new Uint8Array(await (await fetch(`assets/${corename}_libretro.wasm`)).arrayBuffer());
-        if(!coredata || !this.wasmBinary){
-            this.SetConfig({version:null});
+        this.wasmBinary = await this.IDBFS.getContent('coredata', `${corename}_libretro.wasm`);
+        if (!coredata || !this.wasmBinary) {
+            this.SetConfig({ version: null });
             return this.onReady();
         }
         this.printErr = text => {
@@ -115,143 +117,145 @@ var Module = new class {
             this.EVENT.checkLog(text);
         };
         //chinese-fallback-font.ttf
-        this.onRuntimeInitialized = e => {
+        this.onRuntimeInitialized = async e => {
             FS.createPath('/', '/userdata', !0, !0);
             FS.createPath('/', `${this.BASEPATH}/userdata`, !0, !0);
             FS.createPath('/', `${this.BASEPATH}/bundle`, !0, !0);
             FS.mount(this.IDBFS, {}, this.USERPATH);
             FS.mount(this.IDBFS, {}, `${this.BASEPATH}/userdata`);
             FS.mount(this.IDBFS, {}, `${this.BASEPATH}/bundle`);
-            FS.syncfs(!0, ok => {
-                if (coreFile) {
-                    for (let file in coreFile) {
-                        let path = `${this.BASEPATH}/bundle/${file}`;
-                        this.CreateDataFile(path,coreFile[file]);
-                        if(/chinese\-fallback\-font\.ttf$/.test(file)){
-                            this.CreateDataFile(`${this.BASEPATH}/bundle/assets/glui/font.ttf`,coreFile[file]);
-                            this.CreateDataFile(`${this.BASEPATH}/bundle/assets/pkg/fallback-font.ttf`,coreFile[file]);
-                        }
-                        /*
-                        let path = `${this.BASEPATH}/bundle/${file.split('/').slice(0, -1).join('/')}`;
-                        if (!FS.analyzePath(path).exists) FS.createPath('/', path);
-                        if (!FS.analyzePath(`${this.BASEPATH}/bundle/${file}`).exists) FS.createDataFile(path, file.split('/').pop(), coreFile[file], !0, !0);
-                        */
-                        delete coreFile[file];
+            await this.IDBFS.onReady();
+            FS.syncfs(!0,e=>{});
+            if (!FS.analyzePath(`${this.BASEPATH}/bundle/assets`).exists) {
+                let zipu8 = await this.__Fetch({
+                    url: 'assets.zip.js?' + Math.random(),
+                    error: e => console.log(e),
+                    process: (a, b, c) => this.HTML.MSG(`assets.zip.js:${Math.floor(c/1024)}KB`, true)
+                });
+                let coreFile = await this.unZip(zipu8);
+                for (let file in coreFile) {
+                    let path = `${this.BASEPATH}/bundle/${file}`;
+                    this.CreateDataFile(path, coreFile[file]);
+                    if (/chinese\-fallback\-font\.ttf$/.test(file)) {
+                        this.CreateDataFile(`${this.BASEPATH}/bundle/assets/glui/font.ttf`, coreFile[file]);
+                        this.CreateDataFile(`${this.BASEPATH}/bundle/assets/pkg/fallback-font.ttf`, coreFile[file]);
                     }
-                    coreFile = null;
+                    delete coreFile[file];
                 }
-                if (!FS.analyzePath(this.CONFIGPATH).exists) {
-                    let cfg = 'menu_mouse_enable = "true"\n' +
-                        'menu_pointer_enable = "true"\n' +
-                        `menu_driver = "glui"\n`+
-                        //+'materialui_show_nav_bar = false\n'
-                        `materialui_playlist_icons_enable = "false"\n` +
-                        `materialui_auto_rotate_nav_bar = "false"\n` +
-                        `video_font_size = "12.000000"\n` +
-                        `video_adaptive_vsync = "true"\n`+
-                        //`video_shader_enable = true\n`+
-                        `savestate_auto_load = true\n`+
-                        //`fastforward_ratio = 1.0\n`+
-                        `rewind_enable = "false"\n`+
-                        `video_font_path = "/home/web_user/retroarch/bundle/assets/pkg/chinese-fallback-font.ttf"\n`+
-                        `xmb_font = "/home/web_user/retroarch/bundle/assets/pkg/chinese-fallback-font.ttf"\n`+
-
-
-                        `menu_widget_scale_auto = "false"\n` +
-                        'materialui_icons_enable = false\n' +
-                        `menu_scale_factor = "2.000000"\n` +
-                        `menu_show_core_updater = "false"\n` +
-                        `menu_show_help = "false"\n` +
-                        `menu_show_information = "false"\n` +
-                        `menu_show_legacy_thumbnail_updater = "false"\n` +
-                        `menu_show_load_core = "false"\n` +
-                        `menu_show_quit_retroarch = "false"\n` +
-                        `menu_show_overlays = "false"\n` +
-                        `menu_show_online_updater = "false"\n` +
-                        `settings_show_accessibility = "false"\n`+
-                        //+`settings_show_user_interface = "false"\n`
-                        `settings_show_user = "false"\n` +
-                        `settings_show_recording = "false"\n` +
-                        `settings_show_power_management = "false"\n` +
-                        `settings_show_playlists = "false"\n` +
-                        `settings_show_network = "false"\n` +
-                        `settings_show_logging = "false"\n` +
-                        `settings_show_file_browser = "false"\n` +
-                        `settings_show_directory = "false"\n` +
-                        `settings_show_core = "false"\n` +
-                        `settings_show_ai_service = "false"\n` +
-                        `settings_show_achievements = "false"\n` +
-                        `settings_show_drivers = "false"\n` +
-                        `settings_show_configuration = "false"\n` +
-                        `settings_show_latency = "false"\n`+
-                        //+`settings_show_frame_throttle = "false"\n`
-                        `settings_show_saving = "false"\n` +
-                        `camera_allow = "false"\n` +
-                        `camera_driver = "null"\n` +
-                        `camera_device = "null"\n` +
-                        `input_max_users = "1"\n`+
-                        //+`bundle_assets_extract_enable = "false"\n`
-                        `quick_menu_show_information = "false"\n` +
-                        `quick_menu_show_recording = "false"\n` +
-                        `quick_menu_show_reset_core_association = "false"\n` +
-                        `quick_menu_show_save_content_dir_overrides = "false"\n` +
-                        `quick_menu_show_save_core_overrides = "false"\n` +
-                        `quick_menu_show_save_game_overrides = "false"\n` +
-                        `quick_menu_show_start_recording = "false"\n` +
-                        `quick_menu_show_start_streaming = "false"\n` +
-                        `quick_menu_show_streaming = "false"\n` +
-                        `quick_menu_show_add_to_favorites = "false"\n` +
-
-                        `content_show_explore = "fasle"\n` +
-                        `content_show_favorites = "fasle"\n` +
-                        `content_show_history = "fasle"\n` +
-                        `content_show_music = "fasle"\n` +
-                        `content_show_playlists = "fasle"\n` +
-                        `content_favorites_path = "null"\n` +
-                        `content_history_path = "null"\n` +
-                        `content_image_history_path = "null"\n` +
-                        `content_music_history_path = "null"\n` +
-
-                        `playlist_directory = "null"\n` +
-                        `auto_screenshot_filename = "false"\n` +
-                        `savestate_thumbnail_enable = "false"\n` +
-                        `autosave_interval = "1"\n` +
-                        `block_sram_overwrite = "false"\n` +
-                        `savestate_file_compression = "false"\n` +
-                        `save_file_compression = "false"\n` +
-                        `savefile_directory = "${this.USERPATH}/saves"\n` +
-                        `savestate_directory = "${this.USERPATH}/states"\n` +
-                        `screenshot_directory = "${this.USERPATH}/screenshots"\n` +
-                        `system_directory = "${this.BASEPATH}/bundle/system"\n` +
-                        `rgui_browser_directory = "${this.USERPATH}/rooms"\n` +
-                        `core_assets_directory = "${this.USERPATH}/rooms/downloads"\n` +
-                        `cheat_database_path = "${this.USERPATH}/cheats"\n`;
-                    FS.createDataFile(`${this.BASEPATH}/userdata`, 'retroarch.cfg', cfg, !0, !0);
+                coreFile = null;
+                if(FS.analyzePath(this.CONFIGPATH).exists){
+                    FS.unlink(this.CONFIGPATH);
                 }
-                FS.createPath('/', `${this.BASEPATH}/userdata/config/mGBA`, !0, !0);
-                if(!FS.analyzePath(`${this.BASEPATH}/userdata/config/mGBA/mGBA.opt`).exists){
-                    FS.createDataFile(`${this.BASEPATH}/userdata/config/mGBA`,`mGBA.opt`,`mgba_sgb_borders = "OFF"`,!0, !0);
-                }
-                FS.createPath('/', `${this.USERPATH}/states`, !0, !0);
-                FS.createPath('/', `${this.USERPATH}/saves`, !0, !0);
-                FS.createPath('/', `${this.USERPATH}/rooms`, !0, !0);
-                FS.createPath('/', `${this.USERPATH}/rooms/downloads`, !0, !0);
-                FS.createPath('/', `${this.USERPATH}/screenshots`, !0, !0);
-                this.StartRetroArch();
-            });
+            }
+            if (!FS.analyzePath(this.CONFIGPATH).exists) {
+                let cfg = 'menu_mouse_enable = "true"\n' +
+                    'menu_pointer_enable = "true"\n' +
+                    `menu_driver = "glui"\n` +
+                    //+'materialui_show_nav_bar = false\n'
+                    `materialui_playlist_icons_enable = "false"\n` +
+                    `materialui_auto_rotate_nav_bar = "false"\n` +
+                    `video_font_size = "12.000000"\n` +
+                    `video_adaptive_vsync = "true"\n` +
+                    //`video_shader_enable = true\n`+
+                    `savestate_auto_load = true\n` +
+                    //`fastforward_ratio = 1.0\n`+
+                    `rewind_enable = "false"\n` +
+                    `video_font_path = "/home/web_user/retroarch/bundle/assets/pkg/chinese-fallback-font.ttf"\n` +
+                    `xmb_font = "/home/web_user/retroarch/bundle/assets/pkg/chinese-fallback-font.ttf"\n` +
+                    `menu_widget_scale_auto = "false"\n` +
+                    'materialui_icons_enable = false\n' +
+                    `menu_scale_factor = "2.000000"\n` +
+                    `menu_show_core_updater = "false"\n` +
+                    `menu_show_help = "false"\n` +
+                    `menu_show_information = "false"\n` +
+                    `menu_show_legacy_thumbnail_updater = "false"\n` +
+                    `menu_show_load_core = "false"\n` +
+                    `menu_show_quit_retroarch = "false"\n` +
+                    `menu_show_overlays = "false"\n` +
+                    `menu_show_online_updater = "false"\n` +
+                    `settings_show_accessibility = "false"\n` +
+                    //+`settings_show_user_interface = "false"\n`
+                    `settings_show_user = "false"\n` +
+                    `settings_show_recording = "false"\n` +
+                    `settings_show_power_management = "false"\n` +
+                    `settings_show_playlists = "false"\n` +
+                    `settings_show_network = "false"\n` +
+                    `settings_show_logging = "false"\n` +
+                    `settings_show_file_browser = "false"\n` +
+                    `settings_show_directory = "false"\n` +
+                    `settings_show_core = "false"\n` +
+                    `settings_show_ai_service = "false"\n` +
+                    `settings_show_achievements = "false"\n` +
+                    `settings_show_drivers = "false"\n` +
+                    `settings_show_configuration = "false"\n` +
+                    `settings_show_latency = "false"\n` +
+                    //+`settings_show_frame_throttle = "false"\n`
+                    `settings_show_saving = "false"\n` +
+                    `camera_allow = "false"\n` +
+                    `camera_driver = "null"\n` +
+                    `camera_device = "null"\n` +
+                    `input_max_users = "1"\n` +
+                    //+`bundle_assets_extract_enable = "false"\n`
+                    `quick_menu_show_information = "false"\n` +
+                    `quick_menu_show_recording = "false"\n` +
+                    `quick_menu_show_reset_core_association = "false"\n` +
+                    `quick_menu_show_save_content_dir_overrides = "false"\n` +
+                    `quick_menu_show_save_core_overrides = "false"\n` +
+                    `quick_menu_show_save_game_overrides = "false"\n` +
+                    `quick_menu_show_start_recording = "false"\n` +
+                    `quick_menu_show_start_streaming = "false"\n` +
+                    `quick_menu_show_streaming = "false"\n` +
+                    `quick_menu_show_add_to_favorites = "false"\n` +
+
+                    `content_show_explore = "fasle"\n` +
+                    `content_show_favorites = "fasle"\n` +
+                    `content_show_history = "fasle"\n` +
+                    `content_show_music = "fasle"\n` +
+                    `content_show_playlists = "fasle"\n` +
+                    `content_favorites_path = "null"\n` +
+                    `content_history_path = "null"\n` +
+                    `content_image_history_path = "null"\n` +
+                    `content_music_history_path = "null"\n` +
+
+                    `playlist_directory = "null"\n` +
+                    `auto_screenshot_filename = "false"\n` +
+                    `savestate_thumbnail_enable = "false"\n` +
+                    `autosave_interval = "1"\n` +
+                    `block_sram_overwrite = "false"\n` +
+                    `savestate_file_compression = "false"\n` +
+                    `save_file_compression = "false"\n` +
+                    `savefile_directory = "${this.USERPATH}/saves"\n` +
+                    `savestate_directory = "${this.USERPATH}/states"\n` +
+                    `screenshot_directory = "${this.USERPATH}/screenshots"\n` +
+                    `system_directory = "${this.BASEPATH}/bundle/system"\n` +
+                    `rgui_browser_directory = "${this.USERPATH}/rooms"\n` +
+                    `core_assets_directory = "${this.USERPATH}/rooms/downloads"\n` +
+                    `cheat_database_path = "${this.USERPATH}/cheats"\n`;
+                FS.createDataFile(`${this.BASEPATH}/userdata`, 'retroarch.cfg', cfg, !0, !0);
+            }
+            FS.createPath('/', `${this.BASEPATH}/userdata/config/mGBA`, !0, !0);
+            if (!FS.analyzePath(`${this.BASEPATH}/userdata/config/mGBA/mGBA.opt`).exists) {
+                FS.createDataFile(`${this.BASEPATH}/userdata/config/mGBA`, `mGBA.opt`, `mgba_sgb_borders = "OFF"`, !0, !0);
+            }
+            FS.createPath('/', `${this.USERPATH}/states`, !0, !0);
+            FS.createPath('/', `${this.USERPATH}/saves`, !0, !0);
+            FS.createPath('/', `${this.USERPATH}/rooms`, !0, !0);
+            FS.createPath('/', `${this.USERPATH}/rooms/downloads`, !0, !0);
+            FS.createPath('/', `${this.USERPATH}/screenshots`, !0, !0);
+            this.StartRetroArch();
         };
-        coredata = `((Module)=>{\n`+
-                        `${coredata};\n`+
-                        `FS.PATH = PATH;\n`+
-                        `FS.MEMFS = MEMFS;\n`+
-                        `self.FS = FS;\n`+
-                        `Module.LoopTime = e=>_emscripten_set_main_loop_timing(1,1);\n`+
-                        `Module.RA = RA;\n`+
-                        `Module.FS = FS;\n`+
-                        `Module._RWebAudioInit = _RWebAudioInit;\n`+
-                        `Module.Browser = Browser;\n`+
-                        `Module._emscripten_set_main_loop_timing = _emscripten_set_main_loop_timing;\n`+
-                    `})(Module);`;
+        coredata = `${coredata};((Module)=>{\n` +
+            `\n` +
+            `FS.PATH = PATH;\n` +
+            `FS.MEMFS = MEMFS;\n` +
+            `self.FS = FS;\n` +
+            `Module.LoopTime = e=>_emscripten_set_main_loop_timing(1,1);\n` +
+            `Module.RA = RA;\n` +
+            `Module.FS = FS;\n` +
+            `Module._RWebAudioInit = _RWebAudioInit;\n` +
+            `Module.Browser = Browser;\n` +
+            `Module._emscripten_set_main_loop_timing = _emscripten_set_main_loop_timing;\n` +
+            `})(Module);`;
         let script = document.createElement('script');
         script.src = window.URL.createObjectURL(new Blob([coredata], {
             type: 'text/javascript'
@@ -286,65 +290,70 @@ var Module = new class {
         ).replace(
             /function _fd_write\(fd,\s?iov,\s?iovcnt,\s?pnum\)\s?\{\s?\n?\s*try\s?\{\n?\s*var stream\s?=\s?SYSCALLS\.getStreamFromFD\(fd\);\n?\s*var\s?num\s?=\s?SYSCALLS\.doWritev\(stream,\s?iov,\s?iovcnt\);/,
             'function _fd_write(fd,iov,iovcnt,pnum){try{var stream=SYSCALLS.getStreamFromFD(fd);var num = SYSCALLS.doWritev(stream, iov, iovcnt);' +
-            'if(stream&&stream.node&&Module.IDBFS.DB_STORE_MAP[stream.node.mount.mountpoint]){'
-            // num 是储存字符大小
-            +
-            'if(stream.position==num){' +
-            'if(Module.EVENT.ontranslate&&/\.png$/.test(stream.path)){' +
-            'Module.EVENT.translateimgpath = stream.path;' +
-            'clearTimeout(Module.EVENT.syncfsTimer);Module.EVENT.syncfsTimer = setTimeout(e=>Module.EVENT.BtnMap["Baidu"]("POST"),1000);' +
-            '}else if(/\.srm$/.test(stream.path)||/\.rtc$/.test(stream.path)){console.log(stream.path);' +
-            'clearTimeout(Module.EVENT.syncfsTimer);Module.EVENT.syncfsTimer = setTimeout(e=>FS.syncfs(e=>Module.HTML.syncfs(stream.path)),500);' +
-            '}' +
-            '}'
-            //+'console.log(stream.position==num);'
-            +'}'
-            /*).replace(
-                /ret\s?\+=\s?curr\s*\n?\}\s*return ret/,
-                'ret+=curr}'
-                +'if(stream&&stream.node&&this.IDBFS.DB_STORE_MAP[stream.node.mount.mountpoint]){'
-                    +'if(stream.position==ret){'
-                        +'clearTimeout(Module.syncfsTimer);Module.syncfsTimer = setTimeout(e=>FS.syncfs(e=>Module.HTML.syncfs(stream.path)),50);'
-                    +'}'
-                +'}else{'
-                    +'console.log(iov);Module.EVENT.CheckMessage('
-                        +'new TextDecoder().decode(new Uint8Array(HEAP8.subarray(HEAP32[iov>>2],HEAP32[iov>>2]+HEAP32[iov+4>>2])))'
-                        //+'new TextDecoder().decode(new Uint8Array(HEAP8.subarray(HEAP32[iov+8>>2],HEAP32[iov+8>>2]+HEAP32[iov+12>>2])))'
-                    +');'
-                +'}'
-                +'return ret'*/
+            'stream&&stream.node&&Module.CHECK_SAVE(stream,num);'
         );
+    }
+    CHECK_SAVE(stream,num){
+        return this.EVENT.CHECK_SAVE(stream,num);
+    }
+    CHECK_STATE(stream,offset){
+        if(stream&&stream.node&&Module.IDBFS.DB_STORE_MAP[stream.node.mount.mountpoint] == 'userdata'){
+            clearTimeout(Module.EVENT.syncfsTimer);
+            Module.EVENT.syncfsTimer = setTimeout(e=>FS.syncfs(e=>Module.HTML.syncfs(stream.path)),500);
+        }
     }
     async onReady() {
         let corename = this.CoreName.split('_')[0];
-        if (this.CONFIG.version == this.version) return this.INSTALL_WASM();
-        await this.IDBFS.clearDB('assets');
-        await this.IDBFS.clearDB('config');
-        this.__Fetch({
-            url: 'assets/assets.zip.js?' + Math.random(),
-            error: e => console.log(e),
-            process: (a, b, c) => this.HTML.MSG(`${Math.floor(c/1024)}KB`, true),
-            success: buf => {
-                this.unZip(buf).then(async result => {
-                    let timestamp = new Date;
-                    for (var i in this.__FILE__) {
-                        if (result[i]) {
-                            if (i == `${corename}_libretro.js`) {
-                                result[i] = this.REPLACE_MODULE(result[i]);
+        if (this.CONFIG.version != this.version){
+            await this.__Fetch({
+                url: 'mgba_libretro.zip.js?' + Math.random(),
+                error: e => console.log(e),
+                process: (a, b, c) => this.HTML.MSG(`mgba_libretro.zip.js:${Math.floor(c/1024)}KB`, true),
+                success: buf => {
+                    this.unZip(buf).then(async result => {
+                        let timestamp = new Date;
+                        for (var i in result) {
+                            if (result[i]) {
+                                await this.IDBFS.setItem('coredata', i, {
+                                    'content': result[i],
+                                    'mode': 33206,
+                                    timestamp
+                                });
                             }
-                            await this.IDBFS.put('coredata', i, {
-                                'content': result[i],
-                                'mode': 33206,
-                                timestamp
-                            });
+                            result[i] = null;
+                            delete result[i];
                         }
-                        result[i] = null;
-                        delete result[i];
-                    }
-                    this.INSTALL_WASM(result);
-                });
-            }
-        });
+                        this.SetConfig({ 'version': this.version });
+                    });
+                }
+            });
+        }
+        if (this.CONFIG.fileversion != this.fileversion){
+            await this.__Fetch({
+                url: 'lib.zip.js?' + Math.random(),
+                error: e => console.log(e),
+                process: (a, b, c) => this.HTML.MSG(`lib.zip.js:${Math.floor(c/1024)}KB`, true),
+                success: buf => {
+                    this.unZip(buf).then(async result => {
+                        let timestamp = new Date;
+                        for (var i in result) {
+                            if (result[i]) {
+                                await this.IDBFS.setItem('coredata', i, {
+                                    'content': result[i],
+                                    'mode': 33206,
+                                    timestamp
+                                });
+                            }
+                            result[i] = null;
+                            delete result[i];
+                        }
+                        this.SetConfig({ 'fileversion': this.fileversion });
+                    });
+                }
+            });
+        }
+        return this.INSTALL_WASM();
+        
 
     }
     constructor() {
@@ -384,7 +393,7 @@ var Module = new class {
         return this.__FILE__[str];
     }
     async __Fetch(ARG) {
-        let response = await fetch(ARG.url),
+        let response = await fetch('assets/'+ARG.url),
             downsize = response.headers.get("Content-Length") || 1024,
             havesize = 0,
             ContentType = response.headers.get("Content-Type") || 'application/octet-stream';
@@ -416,12 +425,13 @@ var Module = new class {
             }
         });
         let buf = await (new Response(stream)[ARG.type || 'arrayBuffer']());
-        ARG.success(buf);
+        ARG.success&&ARG.success(buf);
         return buf;
     }
     IDBFS = new class {
         DB_STORE_MAP = {};
-        constructor(Module){
+        DB_MOUNT_MAP = {};
+        constructor(Module) {
             this.DB_STORE_MAP[Module.USERPATH] = 'userdata';
             this.DB_STORE_MAP[`${Module.BASEPATH}/userdata`] = 'config';
             this.DB_STORE_MAP[`${Module.BASEPATH}/bundle`] = 'assets';
@@ -432,8 +442,41 @@ var Module = new class {
             if (!ret) throw "IDBFS used, but indexedDB not supported";
             return ret
         }
+        get FS(){
+            return self.FS || self.Module.FS;
+        }
+        get MEMFS(){
+            return this.FS.filesystems.MEMFS ||this.FS.MEMFS;
+        }
+        onReady(){
+            let mounts = FS.root.mount.mounts;
+            return new Promise(complete=>{
+                let Timer = setInterval(()=>{
+                    let ok = true;
+                    for(let i = 0;i<mounts.length;i++){
+                        let node = mounts[i];
+                        if(this.DB_STORE_MAP[node.mountpoint]&&!node.root.isReady){
+                            ok=false;
+                        }
+                    }
+                    if(ok){
+                        clearInterval(Timer);
+                        complete(Timer);
+                    }
+                },100)
+            });
+        }
         mount(mount) {
-            return FS.MEMFS.mount.apply(null, arguments)
+            //this.DB_MOUNT_MAP[mount.mountpoint] = mount;
+            let node = this.MEMFS.createNode(null,mount.mountpoint, 16384 | 511, 0);
+            setTimeout(()=>{
+                this.syncfs(node.mount,!0,e=>{
+                    node.isReady = true;
+                });
+            },1);
+            //let 
+            console.log(node);
+            return node;
         }
         syncfs(mount, populate, callback) {
             return new Promise(cb => {
@@ -450,8 +493,8 @@ var Module = new class {
                 })
             });
         }
-        async get(store, name) {
-            let db = await this.getDB(store);
+        async getItem(store, name) {
+            let db = await this.GET_DB(store);
             var transaction = db.transaction([store]);
             var objectStore = transaction.objectStore(store);
             return new Promise(callback => {
@@ -459,17 +502,8 @@ var Module = new class {
                 request.onsuccess = e => callback(request.result);
             })
         }
-        async getContent(store, name) {
-            let db = await this.getDB(store);
-            var transaction = db.transaction([store]);
-            var objectStore = transaction.objectStore(store);
-            return new Promise(callback => {
-                let request = objectStore.get(name);
-                request.onsuccess = e => callback(request.result && request.result.content || null);
-            })
-        }
-        async put(store, name, data) {
-            let db = await this.getDB(store);
+        async setItem(store, name, data) {
+            let db = await this.GET_DB(store);
             var transaction = db.transaction([store], "readwrite");
             var objectStore = transaction.objectStore(store);
             return new Promise(callback => {
@@ -477,8 +511,13 @@ var Module = new class {
                 request.onsuccess = e => callback(request.result);
             });
         }
+        async getContent(store, name) {
+            let result = await this.getItem(store, name);
+            if(!result) return undefined;
+            return result.content||result;
+        }
         async getAllKeys(store, name, data) {
-            let db = await this.getDB(store);
+            let db = await this.GET_DB(store);
             var transaction = db.transaction([store], "readwrite");
             var objectStore = transaction.objectStore(store);
             return new Promise(callback => {
@@ -487,7 +526,7 @@ var Module = new class {
             });
         }
         async getAll(store, name, data) {
-            let db = await this.getDB(store);
+            let db = await this.GET_DB(store);
             var transaction = db.transaction([store], "readwrite");
             var objectStore = transaction.objectStore(store);
             return new Promise(callback => {
@@ -495,14 +534,14 @@ var Module = new class {
                 request.onsuccess = e => callback(request.result), console.log(request);
             });
         }
-        async getData(store, name, data) {
-            let db = await this.getDB(store);
+        async getList(store, name, data) {
+            let db = await this.GET_DB(store);
             var transaction = db.transaction([store], "readwrite");
             var objectStore = transaction.objectStore(store);
             return new Promise(callback => {
                 var rst_values = {};
                 var req = objectStore.openCursor();
-                req.onsuccess = function (evt) {
+                req.onsuccess = evt => {
                     var cursor = evt.target.result;
                     if (cursor) {
                         rst_values[cursor.primaryKey] = cursor.value;
@@ -515,7 +554,7 @@ var Module = new class {
         }
         async clearDB(storeName) {
             if (!storeName) return this.indexedDB.deleteDatabase(this.DB_NAME);
-            var db = await this.getDB(storeName);
+            var db = await this.GET_DB(storeName);
             var transaction = db.transaction([storeName], "readwrite");
             var objectStore = transaction.objectStore(storeName);
             objectStore.clear();
@@ -524,7 +563,7 @@ var Module = new class {
             if (this.db) this.close();
             console.log(e);
         }
-        async getDB(storeName, version) {
+        async GET_DB(storeName, version) {
             return new Promise((callback, err) => {
                 if (this.db) {
                     if (this.db.objectStoreNames.contains(storeName)) return callback(this.db);
@@ -563,7 +602,7 @@ var Module = new class {
                     if (!db.objectStoreNames.contains(storeName)) {
                         version = db.version + 1;
                         db.close();
-                        this.db = await this.getDB(storeName, version);
+                        this.db = await this.GET_DB(storeName, version);
                     } else {
                         this.db = db;
                     }
@@ -581,21 +620,21 @@ var Module = new class {
                     return p !== "." && p !== ".."
                 },
                 toAbsolute = root => {
-                    return function (p) {
-                        return FS.PATH.join2(root, p)
+                    return p => {
+                        return this.join2(root, p)
                     }
                 },
-                check = FS.readdir(mount.mountpoint).filter(isRealDir).map(toAbsolute(mount.mountpoint));
+                check = this.FS.readdir(mount.mountpoint).filter(isRealDir).map(toAbsolute(mount.mountpoint));
             while (check.length) {
                 var path = check.pop();
                 var stat;
                 try {
-                    stat = FS.stat(path)
+                    stat = this.FS.stat(path)
                 } catch (e) {
                     return callback(e)
                 }
-                if (FS.isDir(stat.mode)) {
-                    check.push.apply(check, FS.readdir(path).filter(isRealDir).map(toAbsolute(path)))
+                if (this.FS.isDir(stat.mode)) {
+                    check.push.apply(check, this.FS.readdir(path).filter(isRealDir).map(toAbsolute(path)))
                 }
                 entries[path] = {
                     timestamp: stat.mtime
@@ -609,7 +648,7 @@ var Module = new class {
         async getRemoteSet(storeName) {
             return new Promise((callback, err) => {
                 var entries = {};
-                this.getDB(storeName).then(db => {
+                this.GET_DB(storeName).then(db => {
                     var transaction = db.transaction([storeName], "readonly");
                     transaction.onerror = e => {
                         err(transaction.error);
@@ -617,7 +656,7 @@ var Module = new class {
                     };
                     var store = transaction.objectStore(storeName);
                     var index = store.index("timestamp");
-                    index.openKeyCursor().onsuccess = function (event) {
+                    index.openKeyCursor().onsuccess = event => {
                         var cursor = event.target.result;
                         if (!cursor) {
                             return callback({
@@ -637,19 +676,19 @@ var Module = new class {
         loadLocalEntry(path, callback) {
             var stat, node;
             try {
-                var lookup = FS.lookupPath(path);
+                var lookup = this.FS.lookupPath(path);
                 node = lookup.node;
-                stat = FS.stat(path)
+                stat = this.FS.stat(path)
             } catch (e) {
                 return callback(e)
             }
-            if (FS.isDir(stat.mode)) {
+            if (this.FS.isDir(stat.mode)) {
                 return callback(null, {
                     timestamp: stat.mtime,
                     mode: stat.mode
                 })
-            } else if (FS.isFile(stat.mode)) {
-                node.contents = FS.MEMFS.getFileDataAsTypedArray(node);
+            } else if (this.FS.isFile(stat.mode)) {
+                node.contents = this.MEMFS.getFileDataAsTypedArray(node);
                 return callback(null, {
                     timestamp: stat.mtime,
                     mode: stat.mode,
@@ -661,17 +700,17 @@ var Module = new class {
         }
         storeLocalEntry(path, entry, callback) {
             try {
-                if (FS.isDir(entry.mode)) {
-                    FS.mkdir(path, entry.mode)
-                } else if (FS.isFile(entry.mode)) {
-                    FS.writeFile(path, entry.contents, {
+                if (this.FS.isDir(entry.mode)) {
+                    this.FS.mkdir(path, entry.mode)
+                } else if (this.FS.isFile(entry.mode)) {
+                    this.FS.writeFile(path, entry.contents, {
                         canOwn: true
                     })
                 } else {
                     return callback(new Error("node type not supported"))
                 }
-                FS.chmod(path, entry.mode);
-                FS.utime(path, entry.timestamp, entry.timestamp)
+                this.FS.chmod(path, entry.mode);
+                this.FS.utime(path, entry.timestamp, entry.timestamp)
             } catch (e) {
                 return callback(e)
             }
@@ -679,12 +718,12 @@ var Module = new class {
         }
         removeLocalEntry(path, callback) {
             try {
-                var lookup = FS.lookupPath(path);
-                var stat = FS.stat(path);
-                if (FS.isDir(stat.mode)) {
-                    FS.rmdir(path)
-                } else if (FS.isFile(stat.mode)) {
-                    FS.unlink(path)
+                var lookup = this.FS.lookupPath(path);
+                var stat = this.FS.stat(path);
+                if (this.FS.isDir(stat.mode)) {
+                    this.FS.rmdir(path)
+                } else if (this.FS.isFile(stat.mode)) {
+                    this.FS.unlink(path)
                 }
             } catch (e) {
                 return callback(e)
@@ -693,7 +732,7 @@ var Module = new class {
         }
         loadRemoteEntry(store, path, callback) {
             var req = store.get(path);
-            req.onsuccess = function (event) {
+            req.onsuccess = event => {
                 callback(null, event.target.result)
             };
             req.onerror = e => {
@@ -703,7 +742,7 @@ var Module = new class {
         }
         storeRemoteEntry(store, path, entry, callback) {
             var req = store.put(entry, path);
-            req.onsuccess = function () {
+            req.onsuccess = () => {
                 callback(null)
             };
             req.onerror = e => {
@@ -713,7 +752,7 @@ var Module = new class {
         }
         removeRemoteEntry(store, path, callback) {
             var req = store.delete(path);
-            req.onsuccess = function () {
+            req.onsuccess = () => {
                 callback(null)
             };
             req.onerror = e => {
@@ -786,29 +825,38 @@ var Module = new class {
                 }
             });
         }
+        splitPath(filename) { var splitPathRe = /^(\/?|)([\s\S]*?)((?:\.{1,2}|[^\/]+?|)(\.[^.\/]*|))(?:[\/]*)$/; return splitPathRe.exec(filename).slice(1) }
+        normalizeArray(parts, allowAboveRoot) { var up = 0; for (var i = parts.length - 1; i >= 0; i--) { var last = parts[i]; if (last === ".") { parts.splice(i, 1) } else if (last === "..") { parts.splice(i, 1); up++ } else if (up) { parts.splice(i, 1); up-- } } if (allowAboveRoot) { for (; up; up--) { parts.unshift("..") } } return parts }
+        normalize(path) { var isAbsolute = path.charAt(0) === "/", trailingSlash = path.substring(-1) === "/"; path = this.normalizeArray(path.split("/").filter(p => { return !!p }), !isAbsolute).join("/"); if (!path && !isAbsolute) { path = "." } if (path && trailingSlash) { path += "/" } return (isAbsolute ? "/" : "") + path }
+        dirname(path) { var result = this.splitPath(path), root = result[0], dir = result[1]; if (!root && !dir) { return "." } if (dir) { dir = dir.substring(0, dir.length - 1) } return root + dir }
+        basename(path) { if (path === "/") return "/"; var lastSlash = path.lastIndexOf("/"); if (lastSlash === -1) return path; return path.substring(lastSlash + 1) }
+        extname(path) { return this.splitPath(path)[3] }
+        join() { var paths = Array.prototype.slice.call(arguments, 0); return this.normalize(paths.join("/")) }
+        join2(l, r) { return this.normalize(l + "/" + r) }
     }(this);
-    async CheckLoadFile(u8,path){
+    async CheckLoadFile(u8, path) {
         console.log(u8);
-        let head = new TextDecoder().decode(u8.slice ? u8.slice(0,6):subarray(0,6)),data;
-        if(/^7z/.test(head))data = await Module.un7z(u8);
-        else if(/^Rar!/.test(head))data = await Module.unRAR(u8);
-        else if(/^PK/.test(head))data = await Module.unZip(u8);
+        let head = new TextDecoder().decode(u8.slice ? u8.slice(0, 6) : subarray(0, 6)),
+            data;
+        if (/^7z/.test(head)) data = await Module.un7z(u8);
+        else if (/^Rar!/.test(head)) data = await Module.unRAR(u8);
+        else if (/^PK/.test(head)) data = await Module.unZip(u8);
         else {
-            this.CreateDataFile(path,u8);
+            this.CreateDataFile(path, u8);
             return path;
         }
-        if(data){
+        if (data) {
             let returnpath;
-            for(var i in data){
-                let newpath = (`${this.USERPATH}/rooms/`+i.split('/').pop()).toLowerCase();
-                if(!returnpath&&(/\.(gb|gbc|gba)$/i).test(newpath))returnpath = newpath;
-                this.CreateDataFile(newpath,data[i]);
+            for (var i in data) {
+                let newpath = (`${this.USERthis}/rooms/` + i.split('/').pop()).toLowerCase();
+                if (!returnpath && (/\.(gb|gbc|gba)$/i).test(newpath)) returnpath = newpath;
+                this.CreateDataFile(newpath, data[i]);
                 delete data[i];
             }
             data = null;
-            if(returnpath)return returnpath;
+            if (returnpath) return returnpath;
         }
-        return ;
+        return;
     }
     async un7z(buf, name) {
         let url = await this.__getFile('un7z.min.js');
@@ -842,8 +890,8 @@ var Module = new class {
         console.log(str);
         if (/Rar!$/.test(str)) url = await this.__getFile('unrar-5-m.min.js'); // rar >=5
         else url = await this.__getFile('unrar-5-m.min.js'); // rar <=4.0
-        name = name&&name + ".rar" || 'test.rar';
-        password = password||"";
+        name = name && name + ".rar" || 'test.rar';
+        password = password || "";
         return new Promise((ok, erro) => {
             let w = new Worker(url);
             w.onmessage = e => {
@@ -858,7 +906,7 @@ var Module = new class {
                         if (!password) return;
                         this.BtnMap['unrar'] = null;
                         this.BtnMap['closelist']();
-                        w.postMessage({"data": [{name,content}],password});
+                        w.postMessage({ "data": [{ name, content }], password });
                     }
                     this.BtnMap['exitrar'] = e => {
                         w.terminate();
@@ -869,7 +917,7 @@ var Module = new class {
                     w.terminate();
                 }
             };
-            w.postMessage({"data": [{name,content}],password});
+            w.postMessage({ "data": [{ name, content }], password });
         });
     }
     KeyMap = {
@@ -898,7 +946,7 @@ var Module = new class {
         input_save_state: "f2",
         input_menu_toggle: "f1",
         input_toggle_slowmotion: null,
-        audio_latency:128,
+        audio_latency: 128,
     };
     keyToCode = {
         "tilde": "Backquote",
@@ -1006,16 +1054,16 @@ var Module = new class {
     //}
 };
 if (typeof IDBObjectStore.prototype.getAll != 'function') {
-    IDBObjectStore.prototype.getAll = function (params) {
+    IDBObjectStore.prototype.getAll = function(params) {
         var request = {};
         var req = this.openCursor(params);
-        req.onerror = function (evt) {
+        req.onerror = function(evt) {
             if (typeof request.onerror == 'function') {
                 request.onerror(evt);
             }
         };
         var rst_values = [];
-        req.onsuccess = function (evt) {
+        req.onsuccess = function(evt) {
             if (typeof request.onsuccess == 'function') {
                 var cursor = evt.target.result;
                 if (cursor) {
