@@ -30,6 +30,7 @@ var Module = new class {
         }
         if (typeof self.GameLink == 'string') {
             let path = `${this.USERPATH}/rooms/` + self.GameLink.split('/').pop();
+            if(!this.CONFIG.files)this.CONFIG.files = {};
             if (this.CONFIG.files[self.GameLink]) {
                 this.SetConfig({ lastgame: this.CONFIG.files[self.GameLink] });
             } else if (FS.analyzePath(path).exists) {
@@ -44,7 +45,6 @@ var Module = new class {
                 if(buf){
                     let returnpath = await this.CheckLoadFile(buf, path);
                     if (returnpath) {
-                        this.CONFIG.version = null;
                         if (!this.CONFIG.files) this.CONFIG.files = {};
                         this.CONFIG.files[self.GameLink] = returnpath;
                         this.SetConfig({ files: this.CONFIG.files, lastgame: returnpath });
@@ -293,53 +293,48 @@ var Module = new class {
     }
     async onReady() {
         let corename = this.CoreName.split('_')[0];
+        let timestamp = new Date;
         if (this.CONFIG.version != this.version){
-            await this.__Fetch({
+            let libbuf = await this.__Fetch({
                 url: 'mgba_libretro.zip.js?' + Math.random(),
                 error: e => console.log(e),
-                process: (a, b, c) => this.HTML.MSG(`mgba_libretro.zip.js:${Math.floor(c/1024)}KB`, true),
-                success: buf => {
-                    this.unZip(buf).then(async result => {
-                        let timestamp = new Date;
-                        for (var i in result) {
-                            if (result[i]) {
-                                await this.IDBFS.setItem('coredata', i, {
-                                    'content': result[i],
-                                    'mode': 33206,
-                                    timestamp
-                                });
-                            }
-                            result[i] = null;
-                            delete result[i];
-                        }
-                        this.SetConfig({ 'version': this.version });
+                process: (a, b, c) => this.HTML.MSG(`mgba_libretro.zip.js:${Math.floor(c/1024)}KB`, true)
+            });
+            let libresult = await this.unZip(libbuf);
+            for (var i in libresult) {
+                if (libresult[i]) {
+                    await this.IDBFS.setItem('coredata', i, {
+                        'content': libresult[i],
+                        'mode': 33206,
+                        timestamp
                     });
                 }
-            });
+                libresult[i] = null;
+                delete libresult[i];
+            }
+            libresult = null;
+            this.SetConfig({ 'version': this.version });
         }
         if (this.CONFIG.fileversion != this.fileversion){
-            await this.__Fetch({
+            let libbuf2 = await this.__Fetch({
                 url: 'lib.zip.js?' + Math.random(),
                 error: e => console.log(e),
-                process: (a, b, c) => this.HTML.MSG(`lib.zip.js:${Math.floor(c/1024)}KB`, true),
-                success: buf => {
-                    this.unZip(buf).then(async result => {
-                        let timestamp = new Date;
-                        for (var i in result) {
-                            if (result[i]) {
-                                await this.IDBFS.setItem('coredata', i, {
-                                    'content': result[i],
-                                    'mode': 33206,
-                                    timestamp
-                                });
-                            }
-                            result[i] = null;
-                            delete result[i];
-                        }
-                        this.SetConfig({ 'fileversion': this.fileversion });
+                process: (a, b, c) => this.HTML.MSG(`lib.zip.js:${Math.floor(c/1024)}KB`, true)
+            });
+            let libresult2 = await this.unZip(libbuf2);
+            for (var i in libresult2) {
+                if (libresult2[i]) {
+                    await this.IDBFS.setItem('coredata', i, {
+                        'content': libresult2[i],
+                        'mode': 33206,
+                        timestamp
                     });
                 }
-            });
+                libresult2[i] = null;
+                delete libresult2[i];
+            }
+            libresult2 = null;
+            this.SetConfig({ 'fileversion': this.fileversion });
         }
         return this.INSTALL_WASM();
         
@@ -758,7 +753,6 @@ var Module = new class {
         join2(l, r) { return this.normalize(l + "/" + r) }
     }(this);
     async CheckLoadFile(u8, path) {
-        console.log(u8);
         if(u8 instanceof ArrayBuffer) u8 = new Uint8Array(u8);
         let head = new TextDecoder().decode(u8.slice ? u8.slice(0, 6) : subarray(0, 6)),
             data;
@@ -772,7 +766,7 @@ var Module = new class {
         if (data) {
             let returnpath;
             for (var i in data) {
-                let newpath = (`${this.USERthis}/rooms/` + i.split('/').pop()).toLowerCase();
+                let newpath = (`${this.USERPATH}/rooms/` + i.split('/').pop()).toLowerCase();
                 if (!returnpath && (/\.(gb|gbc|gba)$/i).test(newpath)) returnpath = newpath;
                 this.CreateDataFile(newpath, data[i]);
                 delete data[i];

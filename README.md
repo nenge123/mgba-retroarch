@@ -1,3 +1,10 @@
+```html
+<script>
+//add in document
+//or like http://mgba.nenge.net/?game=3.rar
+let GameLink = "123.gba";
+<script>
+```
 # Enter "F1"
 - to Retroarch-System
 # Setting -> Input
