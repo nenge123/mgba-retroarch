@@ -9,21 +9,13 @@ var Module = new class {
         this.totalDependencies = Math.max(this.totalDependencies, left);
     }
     version = 2.2;
-    fileversion = 2.1;
+    fileversion = 2.2;
     CoreName = 'mgba_config_data';
     BASEPATH = "/home/web_user/retroarch";
     USERPATH = "/userdata";
     CONFIGPATH = `${this.BASEPATH}/userdata/retroarch.cfg`;
     DB_NAME = "RetroArch_MGBA";
-    __FILE__ = {
-        "un7z.min.js": "assets/js/un7z.min.js",
-        "unrar-5-m.min.js": "assets/js/unrar-5-m.min.js",
-        "unrar-5-m.mem": "assets/js/unrar-5-m.mem",
-        "jszip.min.js": "assets/js/jszip.min.js",
-        "spark-md5.min.js": "assets/js/spark-md5.min.js",
-        "mgba_libretro.js": null,
-        "mgba_libretro.wasm": null,
-    };
+    MyFile = {};
     async StartRetroArch() {
         if (location.search) {
             let search = location.search.replace(/^\?/, '').split('&'),
@@ -43,22 +35,20 @@ var Module = new class {
             } else if (FS.analyzePath(path).exists) {
                 this.SetConfig({ lastgame: path });
             } else {
-                try {
-                    let stream = await fetch(self.GameLink);
-                    if (stream.status != '404') {
-                        let buffer = new Uint8Array(await (stream).arrayBuffer());
-                        if (buffer && buffer.byteLength > 0) {
-                            let returnpath = await this.CheckLoadFile(buffer, path);
-                            if (returnpath) {
-                                this.CONFIG.version = null;
-                                if (!this.CONFIG.files) this.CONFIG.files = {};
-                                this.CONFIG.files[self.GameLink] = returnpath;
-                                this.SetConfig({ files: this.CONFIG.files, lastgame: returnpath });
-                            }
-                        }
+                let buf = await this.__Fetch({
+                    path:'',
+                    url:self.GameLink,
+                    error: e => this.HTML.MSG(`${self.GameLink}:${e}`,true),
+                    process: (a, b, c) => this.HTML.MSG(`${self.GameLink}:${Math.floor(c/1024)}KB`, true),
+                });
+                if(buf){
+                    let returnpath = await this.CheckLoadFile(buf, path);
+                    if (returnpath) {
+                        this.CONFIG.version = null;
+                        if (!this.CONFIG.files) this.CONFIG.files = {};
+                        this.CONFIG.files[self.GameLink] = returnpath;
+                        this.SetConfig({ files: this.CONFIG.files, lastgame: returnpath });
                     }
-                } catch (err) {
-                    alert(err);
                 }
             }
         }
@@ -73,7 +63,7 @@ var Module = new class {
     InitializedData() {
         delete this.callMain;
         delete this.wasmBinary;
-        this.__FILE__ = {};
+        this.MyFile = {};
         let txt = new TextDecoder().decode(FS.readFile(this.CONFIGPATH));
         txt.split("\n").forEach(val => {
             let s = val.split('='),
@@ -104,8 +94,8 @@ var Module = new class {
     }
     async INSTALL_WASM() {
         let corename = this.CoreName.split('_')[0];
-        //let coredata = this.REPLACE_MODULE(await this.IDBFS.getContent('coredata', `${corename}_libretro.js`));
-        let coredata = this.REPLACE_MODULE(await (await fetch(`assets/${corename}_libretro.js`)).arrayBuffer()); //
+        let coredata = this.REPLACE_MODULE(await this.IDBFS.getContent('coredata', `${corename}_libretro.js`));
+        //let coredata = this.REPLACE_MODULE(await (await fetch(`assets/${corename}_libretro.js`)).arrayBuffer()); //
         //(await this.IDBFS.getContent('coredata',`${corename}_libretro.wasm`));
         this.wasmBinary = await this.IDBFS.getContent('coredata', `${corename}_libretro.wasm`);
         if (!coredata || !this.wasmBinary) {
@@ -124,8 +114,7 @@ var Module = new class {
             FS.mount(this.IDBFS, {}, this.USERPATH);
             FS.mount(this.IDBFS, {}, `${this.BASEPATH}/userdata`);
             FS.mount(this.IDBFS, {}, `${this.BASEPATH}/bundle`);
-            await this.IDBFS.onReady();
-            FS.syncfs(!0,e=>{});
+            await this.IDBFS.IsReady();
             if (!FS.analyzePath(`${this.BASEPATH}/bundle/assets`).exists) {
                 let zipu8 = await this.__Fetch({
                     url: 'assets.zip.js?' + Math.random(),
@@ -244,8 +233,8 @@ var Module = new class {
             FS.createPath('/', `${this.USERPATH}/screenshots`, !0, !0);
             this.StartRetroArch();
         };
-        coredata = `${coredata};((Module)=>{\n` +
-            `\n` +
+        coredata = `((Module)=>{\n` +
+            `${coredata};\n` +
             `FS.PATH = PATH;\n` +
             `FS.MEMFS = MEMFS;\n` +
             `self.FS = FS;\n` +
@@ -365,35 +354,33 @@ var Module = new class {
         }
         localStorage.setItem(this.CoreName, JSON.stringify(this.CONFIG));
     }
-    async __getFile(str) {
-        if (this.__FILE__[str]) return this.__FILE__[str];
-        let file = (await this.IDBFS.getContent('coredata', str));
+    async GetFile(str) {
+        if (this.MyFile[str]) return this.MyFile[str];
+        let file = await this.IDBFS.getContent('coredata', str);
         if (!file) {
-            this.__FILE__[str] = `assets/js/${str}`;
-            return this.__FILE__[str];
+            this.MyFile[str] = `assets/js/${str}`;
+            return this.MyFile[str];
         }
-        if (/^unrar\-/.test(str)) {
+        if (/^unrar.+?\.js$/.test(str)) {
             let wasmname = str.split('.')[0],
-                lasChar = wasmname.charAt(wasmname.length - 1),
-                type = lasChar == "m" ? 'mem' : lasChar == "w" ? 'wasm' : "";
+                lasChar = wasmname.slice(-1),
+                type = lasChar == "m" ? 'mem' : lasChar == "w" ? 'wasm' : null;
             if (type) {
-                let wasmdata = await this.IDBFS.getContent('coredata', `${wasmname}.${type}`);
-                if (wasmdata) {
-                    this.__FILE__[`${wasmname}.${type}`] = window.URL.createObjectURL(new Blob([wasmdata], {
-                        type: 'text/javascript'
-                    }));
+                let dataFile = await this.GetFile(`${wasmname}.${type}`);
+                if (dataFile) {
                     file = new TextDecoder().decode(file);
-                    file = file.replace(`${wasmname}.${type}`, this.__FILE__[`${wasmname}.${type}`])
+                    file = file.replace(`libunrar.${type}`,dataFile).replace(`${wasmname}.${type}`,dataFile);
                 }
             };
         }
-        this.__FILE__[str] = window.URL.createObjectURL(new Blob([file], {
+        this.MyFile[str] = window.URL.createObjectURL(new Blob([file], {
             type: 'text/javascript'
         }));
-        return this.__FILE__[str];
+        return this.MyFile[str];
     }
     async __Fetch(ARG) {
-        let response = await fetch('assets/'+ARG.url),
+        let path = ARG.path != undefined ? ARG.path:'assets/';
+        let response = await fetch(path+ARG.url),
             downsize = response.headers.get("Content-Length") || 1024,
             havesize = 0,
             ContentType = response.headers.get("Content-Type") || 'application/octet-stream';
@@ -425,6 +412,7 @@ var Module = new class {
             }
         });
         let buf = await (new Response(stream)[ARG.type || 'arrayBuffer']());
+        buf = new Uint8Array(buf);
         ARG.success&&ARG.success(buf);
         return buf;
     }
@@ -448,7 +436,7 @@ var Module = new class {
         get MEMFS(){
             return this.FS.filesystems.MEMFS ||this.FS.MEMFS;
         }
-        onReady(){
+        IsReady(){
             let mounts = FS.root.mount.mounts;
             return new Promise(complete=>{
                 let Timer = setInterval(()=>{
@@ -474,8 +462,6 @@ var Module = new class {
                     node.isReady = true;
                 });
             },1);
-            //let 
-            console.log(node);
             return node;
         }
         syncfs(mount, populate, callback) {
@@ -485,30 +471,25 @@ var Module = new class {
                     if (err) return callback(err);
                     let storeName = this.DB_STORE_MAP[mount.mountpoint];
                     if (!storeName) return callback('Store Name erro');
-                    this.getRemoteSet(storeName).then(remote => {
+                    this.getRemoteSet(storeName,remote => {
                         var src = populate ? remote : local;
                         var dst = populate ? local : remote;
                         this.reconcile(src, dst, callback, storeName)
-                    }).catch(e => callback(e))
+                    });
                 })
             });
         }
-        async getItem(store, name) {
+        async getItem(store,name,cb) {
+            if(!name) return await this.GetItems(store,cb);
             let db = await this.GET_DB(store);
-            var transaction = db.transaction([store]);
-            var objectStore = transaction.objectStore(store);
             return new Promise(callback => {
-                let request = objectStore.get(name);
-                request.onsuccess = e => callback(request.result);
+                this.transaction(store,db,!0).get(name).onsuccess = e => {callback(e.target.result),cb&&cb(e.target.result)};
             })
         }
-        async setItem(store, name, data) {
+        async setItem(store, name, data,cb) {
             let db = await this.GET_DB(store);
-            var transaction = db.transaction([store], "readwrite");
-            var objectStore = transaction.objectStore(store);
             return new Promise(callback => {
-                let request = objectStore.put(data, name);
-                request.onsuccess = e => callback(request.result);
+                this.transaction(store,db).put(data, name).onsuccess = e => {callback(e.target.result),cb&&cb(e.target.result)};
             });
         }
         async getContent(store, name) {
@@ -516,38 +497,48 @@ var Module = new class {
             if(!result) return undefined;
             return result.content||result;
         }
-        async getAllKeys(store, name, data) {
+        async getAllKeys(store,cb) {
             let db = await this.GET_DB(store);
-            var transaction = db.transaction([store], "readwrite");
-            var objectStore = transaction.objectStore(store);
             return new Promise(callback => {
-                let request = objectStore.getAllKeys();
-                request.onsuccess = e => callback(request.result);
+                this.transaction(store,db,!0).getAllKeys().onsuccess = e => {callback(e.target.result),cb&&cb(e.target.result)};
             });
         }
-        async getAll(store, name, data) {
+        async GetItems(store,cb) {
             let db = await this.GET_DB(store);
-            var transaction = db.transaction([store], "readwrite");
-            var objectStore = transaction.objectStore(store);
             return new Promise(callback => {
-                let request = objectStore.getAll();
-                request.onsuccess = e => callback(request.result), console.log(request);
-            });
-        }
-        async getList(store, name, data) {
-            let db = await this.GET_DB(store);
-            var transaction = db.transaction([store], "readwrite");
-            var objectStore = transaction.objectStore(store);
-            return new Promise(callback => {
-                var rst_values = {};
-                var req = objectStore.openCursor();
-                req.onsuccess = evt => {
+                var entries = {};
+                this.transaction(store,db,!0).openCursor().onsuccess = evt => {
                     var cursor = evt.target.result;
                     if (cursor) {
-                        rst_values[cursor.primaryKey] = cursor.value;
+                        entries[cursor.primaryKey] = cursor.value;
                         cursor.continue();
                     } else {
-                        callback(rst_values);
+                        callback(entries);
+                        cb&&cb(entries);
+                    }
+                }
+            });
+        }
+        transaction(store,db,mode){ db = db || this.db; mode = mode?"readonly":"readwrite"; var transaction = db.transaction([store],mode); transaction.onerror = e => { e.preventDefault(); throw transaction.error; }; return transaction.objectStore(store);}
+        async getRemoteSet(store,key,cb) {
+            let db = await this.GET_DB(store);
+            if(typeof key == 'function'){
+                cb = key;
+                key = null;
+            }
+            key = key||"timestamp";
+            return new Promise(callback => {
+                var type="remote",entries = {};
+                this.transaction(store,db).index(key).openKeyCursor().onsuccess = evt => {
+                    var cursor = evt.target.result;
+                    if (cursor) {
+                        entries[cursor.primaryKey] = {};
+                        entries[cursor.primaryKey][key] = cursor.key;
+                        cursor.continue();
+                    } else {
+                        let remote = {type,db,entries};
+                        callback(remote);
+                        cb&&cb(remote);
                     }
                 }
             });
@@ -555,15 +546,13 @@ var Module = new class {
         async clearDB(storeName) {
             if (!storeName) return this.indexedDB.deleteDatabase(this.DB_NAME);
             var db = await this.GET_DB(storeName);
-            var transaction = db.transaction([storeName], "readwrite");
-            var objectStore = transaction.objectStore(storeName);
-            objectStore.clear();
+            this.transaction(store,db).clear();
         }
         close(e) {
             if (this.db) this.close();
             console.log(e);
         }
-        async GET_DB(storeName, version) {
+        async GET_DB(storeName, version,key) {
             return new Promise((callback, err) => {
                 if (this.db) {
                     if (this.db.objectStoreNames.contains(storeName)) return callback(this.db);
@@ -576,23 +565,20 @@ var Module = new class {
                 if (!req) return err("Unable to connect to IndexedDB");
                 req.onupgradeneeded = e => {
                     var db = e.target.result;
-                    var transaction = e.target.transaction;
                     var fileStore;
+                    let keyId = key || "timestamp",
+                        createIndex= e=>e.createIndex(keyId, keyId, {"unique": false});
                     if (!db.objectStoreNames.contains(storeName)) {
                         for (var i in this.DB_STORE_MAP) {
                             if (db.objectStoreNames.contains(this.DB_STORE_MAP[i])) continue;
                             let Store = db.createObjectStore(this.DB_STORE_MAP[i]);
-                            if (!Store.indexNames.contains("timestamp")) Store.createIndex("timestamp", "timestamp", {
-                                unique: false
-                            });
+                            if (!Store.indexNames.contains(keyId)) createIndex(Store);
                             if (this.DB_STORE_MAP[i] == storeName) fileStore = Store;
                         }
                         if (!fileStore) {
                             fileStore = db.createObjectStore(storeName);
-                            if (!fileStore.indexNames.contains("timestamp")) {
-                                fileStore.createIndex("timestamp", "timestamp", {
-                                    unique: false
-                                });
+                            if (!fileStore.indexNames.contains(keyId)) {
+                                createIndex(fileStore);
                             }
                         }
                     }
@@ -602,7 +588,7 @@ var Module = new class {
                     if (!db.objectStoreNames.contains(storeName)) {
                         version = db.version + 1;
                         db.close();
-                        this.db = await this.GET_DB(storeName, version);
+                        this.db = await this.GET_DB(storeName, version,key);
                     } else {
                         this.db = db;
                     }
@@ -614,72 +600,15 @@ var Module = new class {
                 }
             });
         }
-        getLocalSet(mount, callback) {
-            let entries = {},
-                isRealDir = p => {
-                    return p !== "." && p !== ".."
-                },
-                toAbsolute = root => {
-                    return p => {
-                        return this.join2(root, p)
-                    }
-                },
-                check = this.FS.readdir(mount.mountpoint).filter(isRealDir).map(toAbsolute(mount.mountpoint));
-            while (check.length) {
-                var path = check.pop();
-                var stat;
-                try {
-                    stat = this.FS.stat(path)
-                } catch (e) {
-                    return callback(e)
-                }
-                if (this.FS.isDir(stat.mode)) {
-                    check.push.apply(check, this.FS.readdir(path).filter(isRealDir).map(toAbsolute(path)))
-                }
-                entries[path] = {
-                    timestamp: stat.mtime
-                }
-            }
-            return callback(null, {
-                "type": "local",
-                entries
-            })
-        }
-        async getRemoteSet(storeName) {
-            return new Promise((callback, err) => {
-                var entries = {};
-                this.GET_DB(storeName).then(db => {
-                    var transaction = db.transaction([storeName], "readonly");
-                    transaction.onerror = e => {
-                        err(transaction.error);
-                        e.preventDefault()
-                    };
-                    var store = transaction.objectStore(storeName);
-                    var index = store.index("timestamp");
-                    index.openKeyCursor().onsuccess = event => {
-                        var cursor = event.target.result;
-                        if (!cursor) {
-                            return callback({
-                                type: "remote",
-                                db: db,
-                                entries: entries
-                            })
-                        }
-                        entries[cursor.primaryKey] = {
-                            timestamp: cursor.key
-                        };
-                        cursor.continue()
-                    }
-                }).catch(e => err(e))
-            });
-        }
+        getLocalSet(mount, callback) { let entries = {}, isRealDir = p => p !== "." && p !== "..", toAbsolute = root => p =>this.join2(root, p), check = this.FS.readdir(mount.mountpoint).filter(isRealDir).map(toAbsolute(mount.mountpoint)); while (check.length) { let path = check.pop(); if(this.FS.analyzePath(path).exists){ let stat = this.FS.stat(path); if (this.FS.isDir(stat.mode)) { check.push.apply(check, this.FS.readdir(path).filter(isRealDir).map(toAbsolute(path))) } entries[path] = { timestamp: stat.mtime } } } return callback(null, {"type": "local",entries})}
         loadLocalEntry(path, callback) {
             var stat, node;
-            try {
+            if(this.FS.analyzePath(path).exists){
                 var lookup = this.FS.lookupPath(path);
                 node = lookup.node;
                 stat = this.FS.stat(path)
-            } catch (e) {
+
+            }else{
                 return callback(e)
             }
             if (this.FS.isDir(stat.mode)) {
@@ -703,9 +632,7 @@ var Module = new class {
                 if (this.FS.isDir(entry.mode)) {
                     this.FS.mkdir(path, entry.mode)
                 } else if (this.FS.isFile(entry.mode)) {
-                    this.FS.writeFile(path, entry.contents, {
-                        canOwn: true
-                    })
+                    this.FS.writeFile(path, entry.contents, {canOwn: true})
                 } else {
                     return callback(new Error("node type not supported"))
                 }
@@ -717,7 +644,7 @@ var Module = new class {
             callback(null)
         }
         removeLocalEntry(path, callback) {
-            try {
+            if(this.FS.analyzePath(path).exists){
                 var lookup = this.FS.lookupPath(path);
                 var stat = this.FS.stat(path);
                 if (this.FS.isDir(stat.mode)) {
@@ -725,7 +652,8 @@ var Module = new class {
                 } else if (this.FS.isFile(stat.mode)) {
                     this.FS.unlink(path)
                 }
-            } catch (e) {
+
+            }else{
                 return callback(e)
             }
             callback(null)
@@ -786,8 +714,7 @@ var Module = new class {
             var errored = false;
             var completed = 0;
             var db = src.type === "remote" ? src.db : dst.db;
-            var transaction = db.transaction([storeName], "readwrite");
-            var store = transaction.objectStore(storeName),
+            var store = this.transaction(storeName,db),
                 done = err => {
                     if (err) {
                         if (!done.errored) {
@@ -800,10 +727,6 @@ var Module = new class {
                         return callback(null)
                     }
                 };
-            transaction.onerror = e => {
-                done(transaction.error);
-                e.preventDefault()
-            };
             create.sort().forEach(path => {
                 if (dst.type === "local") {
                     this.loadRemoteEntry(store, path, (err, entry) => {
@@ -836,10 +759,11 @@ var Module = new class {
     }(this);
     async CheckLoadFile(u8, path) {
         console.log(u8);
+        if(u8 instanceof ArrayBuffer) u8 = new Uint8Array(u8);
         let head = new TextDecoder().decode(u8.slice ? u8.slice(0, 6) : subarray(0, 6)),
             data;
         if (/^7z/.test(head)) data = await Module.un7z(u8);
-        else if (/^Rar!/.test(head)) data = await Module.unRAR(u8);
+        else if (/^Rar!/.test(head) || /[\x52][\x45][\x7E][\x5E]/.test(head)) data = await Module.unRAR(u8);
         else if (/^PK/.test(head)) data = await Module.unZip(u8);
         else {
             this.CreateDataFile(path, u8);
@@ -859,7 +783,7 @@ var Module = new class {
         return;
     }
     async un7z(buf, name) {
-        let url = await this.__getFile('un7z.min.js');
+        let url = await this.GetFile('un7z.min.js');
         return new Promise((ok, erro) => {
             let w = new Worker(url);
             w.onmessage = e => {
@@ -870,7 +794,7 @@ var Module = new class {
         });
     }
     async unZip(buf, name, cb) {
-        let url = await this.__getFile('jszip.min.js');
+        let url = await this.GetFile('jszip.min.js');
         return new Promise((ok, erro) => {
             let w = new Worker(url),
                 F = {};
@@ -887,9 +811,14 @@ var Module = new class {
     async unRAR(content, name, password) {
         let str = new TextDecoder().decode(new Uint8Array(content.subarray(0, 8)));
         let url;
-        console.log(str);
-        if (/Rar!$/.test(str)) url = await this.__getFile('unrar-5-m.min.js'); // rar >=5
-        else url = await this.__getFile('unrar-5-m.min.js'); // rar <=4.0
+        //https://github.com/tnikolai2/libunrar-js only support english file name
+        if (str == 'Rar!\x1A\x07\x01\x00') url = await this.GetFile('unrar-5-9-2-w.min.js'); // rar >=5.9?
+        //Rar!\x1A\x07\x00  <5.0
+        //https://github.com/wcchoi/libunrar-js
+        // if(/^Rar![\x1A][\x07][\x00]/.test(str)) 
+        else url = await this.GetFile('unrar-5-m.min.js'); // rar <=4.0
+        ///[\x52][\x45][\x7E][\x5E]/.test(head) <1.5
+        // https://github.com/seikichi/unrar.js
         name = name && name + ".rar" || 'test.rar';
         password = password || "";
         return new Promise((ok, erro) => {
