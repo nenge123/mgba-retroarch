@@ -712,7 +712,7 @@
             }
             return false;
         };
-        CHECK_SAVE(stream,num){
+        CHECK_SAVE(stream,num,iov, iovcnt){
             if(stream&&stream.node&&Module.IDBFS.DB_STORE_MAP[stream.node.mount.mountpoint]){
             // num 是储存字符大小
                 if(stream.position==num){
@@ -726,7 +726,11 @@
                     }
                 }
             }else if(stream.path.match(/\.state$/)){
-                console.log(stream);
+                //console.log(stream);
+            }else{
+                if(stream.tty&&stream.tty.output.length>7){
+                    //console.log(iov, iovcnt,new TextDecoder().decode(new Uint8Array(stream.tty.output)));
+                }
             }
         }
         UP_LOAD_FILE(cb){

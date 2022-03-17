@@ -9,7 +9,7 @@ var Module = new class {
         this.totalDependencies = Math.max(this.totalDependencies, left);
     }
     version = 2.2;
-    fileversion = 2.2;
+    fileversion = 2.5;
     CoreName = 'mgba_config_data';
     BASEPATH = "/home/web_user/retroarch";
     USERPATH = "/userdata";
@@ -95,7 +95,7 @@ var Module = new class {
     async INSTALL_WASM() {
         let corename = this.CoreName.split('_')[0];
         let coredata = this.REPLACE_MODULE(await this.IDBFS.getContent('coredata', `${corename}_libretro.js`));
-        //let coredata = this.REPLACE_MODULE(await (await fetch(`assets/${corename}_libretro.js`)).arrayBuffer()); //
+       // let coredata = this.REPLACE_MODULE(await (await fetch(`assets/${corename}_libretro.js`)).arrayBuffer()); //
         //(await this.IDBFS.getContent('coredata',`${corename}_libretro.wasm`));
         this.wasmBinary = await this.IDBFS.getContent('coredata', `${corename}_libretro.wasm`);
         if (!coredata || !this.wasmBinary) {
@@ -279,11 +279,11 @@ var Module = new class {
         ).replace(
             /function _fd_write\(fd,\s?iov,\s?iovcnt,\s?pnum\)\s?\{\s?\n?\s*try\s?\{\n?\s*var stream\s?=\s?SYSCALLS\.getStreamFromFD\(fd\);\n?\s*var\s?num\s?=\s?SYSCALLS\.doWritev\(stream,\s?iov,\s?iovcnt\);/,
             'function _fd_write(fd,iov,iovcnt,pnum){try{var stream=SYSCALLS.getStreamFromFD(fd);var num = SYSCALLS.doWritev(stream, iov, iovcnt);' +
-            'stream&&stream.node&&Module.CHECK_SAVE(stream,num);'
+            'stream&&stream.node&&Module.CHECK_SAVE(stream,num,iov, iovcnt);'
         );
     }
-    CHECK_SAVE(stream,num){
-        return this.EVENT.CHECK_SAVE(stream,num);
+    CHECK_SAVE(){
+        return this.EVENT.CHECK_SAVE.apply(this.EVENT,arguments);
     }
     CHECK_STATE(stream,offset){
         if(stream&&stream.node&&Module.IDBFS.DB_STORE_MAP[stream.node.mount.mountpoint] == 'userdata'){
@@ -361,10 +361,10 @@ var Module = new class {
                 lasChar = wasmname.slice(-1),
                 type = lasChar == "m" ? 'mem' : lasChar == "w" ? 'wasm' : null;
             if (type) {
-                let dataFile = await this.GetFile(`${wasmname}.${type}`);
+                let ff=`${wasmname}.${type}.png`,dataFile = await this.GetFile(ff);
                 if (dataFile) {
                     file = new TextDecoder().decode(file);
-                    file = file.replace(`libunrar.${type}`,dataFile).replace(`${wasmname}.${type}`,dataFile);
+                    file = file.replace(`libunrar.${type}`,dataFile).replace(ff,dataFile);
                 }
             };
         }
@@ -412,9 +412,8 @@ var Module = new class {
         return buf;
     }
     IDBFS = new class {
-        DB_STORE_MAP = {};
-        DB_MOUNT_MAP = {};
         constructor(Module) {
+            this.Module = Module;
             this.DB_STORE_MAP[Module.USERPATH] = 'userdata';
             this.DB_STORE_MAP[`${Module.BASEPATH}/userdata`] = 'config';
             this.DB_STORE_MAP[`${Module.BASEPATH}/bundle`] = 'assets';
@@ -431,6 +430,173 @@ var Module = new class {
         get MEMFS(){
             return this.FS.filesystems.MEMFS ||this.FS.MEMFS;
         }
+        async getItem(store,name,cb) {
+            if(!name) return await this.GetItems(store,cb);
+            let T = this,db = await T.GET_DB(store),
+            maxsize = T.maxsize,
+            part = T.part;
+            return new Promise(callback => {
+                T.transaction(store,db,!0).get(name).onsuccess = event => {
+                    let result = event.target.result;
+                    if(result&&result.content&&result.filesize&&result.filesize>maxsize&&result.key.search(part) ==-1){
+                        let maxLen = Math.ceil(result.filesize/maxsize),
+                        returnBuf = new Uint8Array(result.filesize),
+                        list=[];
+                        returnBuf.set(result.content,0);
+                        delete result.content;
+                        for(let index=1;index<maxLen;index++){
+                            list.push(T.getItem(store,name+part+index));
+                        }
+                        return Promise.all(list).then(values_1=>{
+                            for (var m = 0; m < values_1.length; m++) {
+                                let index_1 = Number(values_1[m].key.split(part).pop());
+                                returnBuf.set(values_1[m].content, index_1 * maxsize);
+                                delete values_1[m].content;
+                                delete values_1[m];
+                            }
+                            result.content = returnBuf;
+                            callback(result);
+                            cb && cb(result);
+                        });
+    
+                    }
+                    callback(result),
+                    cb&&cb(result)
+                };
+            })
+        }
+        async setItem(store, name, data,cb) {
+            let T=this,db = await T.GET_DB(store),maxsize = T.maxsize,part = T.part;
+            if(data.content&&data.content.length>maxsize){
+                let save = [],BufLen = data.content.length;
+                for(var index=0;index<Math.ceil(BufLen/maxsize);index++){
+                    let newdata = {
+                            filesize:data.filesize,
+                            timestamp:data.timestamp,
+                            type:data.type
+                        };
+                    newdata.content = new Uint8Array(data.content.subarray(maxsize*index,BufLen - maxsize*index>=maxsize ? (index+1)*maxsize :BufLen)) ;
+                    newdata.key = index>0?name+part+index:name;
+                    save.push(T.setItem(store,newdata.key,newdata));
+    
+                }
+                const values_1 = await Promise.all(save);
+                cb && cb(values_1);
+                return values_1;
+            }
+            return new Promise(callback => {
+                T.transaction(store,db).put(data, name).onsuccess = e => {
+                    callback(e.target.result),cb&&cb(e.target.result)};
+            });
+        }
+        async getContent(store, name) {
+            let result = await this.getItem(store, name);
+            if(!result) return undefined;
+            return result.content||result;
+        }
+        async getAllKeys(store,cb) {
+            let T=this,db = await T.GET_DB(store);
+            return new Promise(callback => {
+                T.transaction(store,db,!0).getAllKeys().onsuccess = e => {callback(e.target.result),cb&&cb(e.target.result)};
+            });
+        }
+        async GetItems(store,cb) {
+            let T=this,db = await T.GET_DB(store);
+            return new Promise(callback => {
+                var entries = {};
+                T.transaction(store,db,!0).openCursor().onsuccess = evt => {
+                    var cursor = evt.target.result;
+                    if (cursor) {
+                        entries[cursor.primaryKey] = cursor.value;
+                        cursor.continue();
+                    } else {
+                        callback(entries);
+                        cb&&cb(entries);
+                    }
+                }
+            });
+        }
+        async FectchItem(ARG){
+            let T=this,key = ARG.key || ARG.url.split('/').pop(),
+                response = await fetch(ARG.url),
+                type = ARG.type || 'arrayBuffer',
+                downsize = response.headers.get("Content-Length") || 1024,
+                havesize = 0;
+            if(ARG.store){
+                let content = await T.getContent(ARG.store,key);
+                if(content&&(!downsize || (downsize&&downsize==content.length) || response.status == 404)){
+                    ARG.success&&ARG.success(content);
+                    return content;
+                }
+            }
+            if (response.status == 404) {
+                ARG.error && ARG.error(response.statusText);
+                return;
+            }
+            const reader = response.body.getReader();
+            const stream = new ReadableStream({
+                start(controller) {
+                    let push = e => {
+                        reader.read().then(({
+                            done,
+                            value
+                        }) => {
+                            if (done) {
+                                controller.close();
+                                push = null;
+                                return;
+                            }
+                            havesize += value.length;
+                            let statussize = '0%';
+                            if(downsize)statussize = Math.floor(havesize / downsize * 100) + '%';
+                            ARG.process && ARG.process(statussize, value.length, havesize);
+                            //下载或者上传进度
+                            controller.enqueue(value);
+                            push();
+                        });
+                    }
+                    push();
+                }
+            });
+            let content = await (new Response(stream)[type]());
+            let filesize = content.byteLength;
+            if(['arrayBuffer','Uint8Array'].includes(type)){
+                content = new Uint8Array(content);
+                filesize = content.byteLength;
+            };
+            if(ARG.unpack){
+                content = await T.CHECK_FILE(content,key)||content;
+                console.log(content);
+            }
+            if(ARG.store){
+                T.setItem(ARG.store,key,{
+                    content,
+                    timestamp:new Date,
+                    filesize,
+                    type
+                });
+            }
+            ARG.success&&ARG.success(content);
+            return content;
+        }
+        async CHECK_FILE(u8,name){
+            if(u8 instanceof ArrayBuffer) u8 = new Uint8Array(u8);
+            let head = new TextDecoder().decode(u8.slice ? u8.slice(0, 6) : subarray(0, 6)),
+                Module=this.Module,
+                data = {};
+            if (/^7z/.test(head)) data = await Module.un7z(u8);
+            else if (/^Rar!/.test(head) || /[\x52][\x45][\x7E][\x5E]/.test(head)) data = await Module.unRAR(u8);
+            else if (/^PK/.test(head)) data = await Module.unZip(u8);
+            else {
+                data[name] = u8;
+            }
+            return data;
+
+        }
+        maxsize = 0x6400000;
+        part = '-part-';
+        DB_STORE_MAP = {};
+        DB_MOUNT_MAP = {};
         IsReady(){
             let mounts = FS.root.mount.mounts;
             return new Promise(complete=>{
@@ -450,81 +616,38 @@ var Module = new class {
             });
         }
         mount(mount) {
-            //this.DB_MOUNT_MAP[mount.mountpoint] = mount;
-            let node = this.MEMFS.createNode(null,mount.mountpoint, 16384 | 511, 0);
+            let T=this,node = T.MEMFS.createNode(null,mount.mountpoint, 16384 | 511, 0);
             setTimeout(()=>{
-                this.syncfs(node.mount,!0,e=>{
+                T.syncfs(node.mount,!0,e=>{
                     node.isReady = true;
                 });
             },1);
             return node;
         }
         syncfs(mount, populate, callback) {
+            let T=this;
             return new Promise(cb => {
-                callback = callback || cb;
-                this.getLocalSet(mount, (err, local) => {
+                callback = callback || populate||cb;
+                T.getLocalSet(mount, (err, local) => {
                     if (err) return callback(err);
-                    let storeName = this.DB_STORE_MAP[mount.mountpoint];
+                    let storeName = T.DB_STORE_MAP[mount.mountpoint];
                     if (!storeName) return callback('Store Name erro');
-                    this.getRemoteSet(storeName,remote => {
+                    T.getRemoteSet(storeName,remote => {
                         var src = populate ? remote : local;
                         var dst = populate ? local : remote;
-                        this.reconcile(src, dst, callback, storeName)
+                        T.reconcile(src, dst, callback, storeName)
                     });
                 })
             });
         }
-        async getItem(store,name,cb) {
-            if(!name) return await this.GetItems(store,cb);
-            let db = await this.GET_DB(store);
-            return new Promise(callback => {
-                this.transaction(store,db,!0).get(name).onsuccess = e => {callback(e.target.result),cb&&cb(e.target.result)};
-            })
-        }
-        async setItem(store, name, data,cb) {
-            let db = await this.GET_DB(store);
-            return new Promise(callback => {
-                this.transaction(store,db).put(data, name).onsuccess = e => {callback(e.target.result),cb&&cb(e.target.result)};
-            });
-        }
-        async getContent(store, name) {
-            let result = await this.getItem(store, name);
-            if(!result) return undefined;
-            return result.content||result;
-        }
-        async getAllKeys(store,cb) {
-            let db = await this.GET_DB(store);
-            return new Promise(callback => {
-                this.transaction(store,db,!0).getAllKeys().onsuccess = e => {callback(e.target.result),cb&&cb(e.target.result)};
-            });
-        }
-        async GetItems(store,cb) {
-            let db = await this.GET_DB(store);
-            return new Promise(callback => {
-                var entries = {};
-                this.transaction(store,db,!0).openCursor().onsuccess = evt => {
-                    var cursor = evt.target.result;
-                    if (cursor) {
-                        entries[cursor.primaryKey] = cursor.value;
-                        cursor.continue();
-                    } else {
-                        callback(entries);
-                        cb&&cb(entries);
-                    }
-                }
-            });
-        }
         transaction(store,db,mode){ db = db || this.db; mode = mode?"readonly":"readwrite"; var transaction = db.transaction([store],mode); transaction.onerror = e => { e.preventDefault(); throw transaction.error; }; return transaction.objectStore(store);}
-        async getRemoteSet(store,key,cb) {
-            let db = await this.GET_DB(store);
-            if(typeof key == 'function'){
-                cb = key;
-                key = null;
-            }
-            key = key||"timestamp";
+        async getRemoteSet(store,cb) {
+            let T=this,db = await T.GET_DB(store);
             return new Promise(callback => {
-                var type="remote",entries = {};
-                this.transaction(store,db).index(key).openKeyCursor().onsuccess = evt => {
+                var type="remote",
+                    entries = {},
+                    key = "timestamp";
+                T.transaction(store,db).index(key).openKeyCursor().onsuccess = evt => {
                     var cursor = evt.target.result;
                     if (cursor) {
                         entries[cursor.primaryKey] = {};
@@ -539,55 +662,59 @@ var Module = new class {
             });
         }
         async clearDB(storeName) {
-            if (!storeName) return this.indexedDB.deleteDatabase(this.DB_NAME);
-            var db = await this.GET_DB(storeName);
-            this.transaction(store,db).clear();
+            let T=this;
+            if (!storeName) return T.indexedDB.deleteDatabase(T.DB_NAME);
+            var db = await T.GET_DB(storeName);
+            T.transaction(store,db).clear();
         }
         close(e) {
-            if (this.db) this.close();
-            console.log(e);
+            this.db&&this.db.close();
+        }
+        get StoreNames(){
+            return this.db.objectStoreNames;
         }
         async GET_DB(storeName, version,key) {
+            let T=this;
             return new Promise((callback, err) => {
-                if (this.db) {
-                    if (this.db.objectStoreNames.contains(storeName)) return callback(this.db);
+                if (T.db) {
+                    if (T.StoreNames.contains(storeName)) return callback(T.db);
                     else {
-                        this.db.close();
-                        version = this.db.version + 1;
+                        T.close();
+                        version = T.db.version + 1;
                     }
                 }
-                let req = this.indexedDB.open(this.DB_NAME, version);
+                let req = T.indexedDB.open(T.DB_NAME, version);
                 if (!req) return err("Unable to connect to IndexedDB");
                 req.onupgradeneeded = e => {
-                    var db = e.target.result;
+                    T.db = e.target.result;
                     var fileStore;
-                    let keyId = key || "timestamp",
-                        createIndex= e=>e.createIndex(keyId, keyId, {"unique": false});
-                    if (!db.objectStoreNames.contains(storeName)) {
-                        for (var i in this.DB_STORE_MAP) {
-                            if (db.objectStoreNames.contains(this.DB_STORE_MAP[i])) continue;
-                            let Store = db.createObjectStore(this.DB_STORE_MAP[i]);
-                            if (!Store.indexNames.contains(keyId)) createIndex(Store);
-                            if (this.DB_STORE_MAP[i] == storeName) fileStore = Store;
+                        createIndex= (store,keyId)=>store.createIndex(keyId, keyId, {"unique": false});
+                    if (!T.StoreNames.contains(storeName)) {
+                        for (var i in T.DB_STORE_MAP) {
+                            let NAME = T.DB_STORE_MAP[i] || i,
+                                keyId =  null;
+                            if (T.StoreNames.contains(NAME)) continue;
+                            let Store = T.db.createObjectStore(NAME);
+                            if(T.DB_STORE_MAP[i])keyId = "timestamp";
+                            else if (key&&NAME == storeName) keyId = key;
+                            if (keyId&&!Store.indexNames.contains(keyId)) createIndex(Store,keyId);
+                            if (NAME == storeName) fileStore = Store;
                         }
                         if (!fileStore) {
-                            fileStore = db.createObjectStore(storeName);
-                            if (!fileStore.indexNames.contains(keyId)) {
-                                createIndex(fileStore);
-                            }
+                            fileStore = T.db.createObjectStore(storeName);
+                            if (key&&!fileStore.indexNames.contains(key))createIndex(fileStore,key);
                         }
                     }
                 };
                 req.onsuccess = async e => {
-                    let db = e.target.result;
-                    if (!db.objectStoreNames.contains(storeName)) {
-                        version = db.version + 1;
-                        db.close();
-                        this.db = await this.GET_DB(storeName, version,key);
-                    } else {
-                        this.db = db;
+                    T.db = e.target.result;
+                    if (!T.StoreNames.contains(storeName)) {
+                        version = T.db.version + 1;
+                        T.close();
+                        T.GET_DB(storeName, version,key).then(db=>callback(db));
+                    }else{
+                        callback(T.db);
                     }
-                    callback(this.db);
                 };
                 req.onerror = e => {
                     err(req.error);
@@ -595,24 +722,46 @@ var Module = new class {
                 }
             });
         }
-        getLocalSet(mount, callback) { let entries = {}, isRealDir = p => p !== "." && p !== "..", toAbsolute = root => p =>this.join2(root, p), check = this.FS.readdir(mount.mountpoint).filter(isRealDir).map(toAbsolute(mount.mountpoint)); while (check.length) { let path = check.pop(); if(this.FS.analyzePath(path).exists){ let stat = this.FS.stat(path); if (this.FS.isDir(stat.mode)) { check.push.apply(check, this.FS.readdir(path).filter(isRealDir).map(toAbsolute(path))) } entries[path] = { timestamp: stat.mtime } } } return callback(null, {"type": "local",entries})}
+        getLocalSet(mount, callback) {
+            let T=this,FS=T.FS,entries = {},
+                isRealDir = p => p !== "." && p !== "..",
+                toAbsolute = root => p => T.join2(root, p),
+                check = FS.readdir(mount.mountpoint).filter(isRealDir).map(toAbsolute(mount.mountpoint));
+            while (check.length) {
+                let path = check.pop();
+                if (FS.analyzePath(path).exists) {
+                    let stat = FS.stat(path);
+                    if (FS.isDir(stat.mode)) {
+                        check.push.apply(check, FS.readdir(path).filter(isRealDir).map(toAbsolute(path)))
+                    }
+                    entries[path] = {
+                        timestamp: stat.mtime
+                    }
+                }
+            }
+            return callback(null, {
+                "type": "local",
+                entries
+            })
+        }
         loadLocalEntry(path, callback) {
+            let T=this,FS=T.FS;
             var stat, node;
-            if(this.FS.analyzePath(path).exists){
-                var lookup = this.FS.lookupPath(path);
+            if(FS.analyzePath(path).exists){
+                var lookup = FS.lookupPath(path);
                 node = lookup.node;
-                stat = this.FS.stat(path)
-
+                stat = FS.stat(path)
+    
             }else{
                 return callback(e)
             }
-            if (this.FS.isDir(stat.mode)) {
+            if (FS.isDir(stat.mode)) {
                 return callback(null, {
                     timestamp: stat.mtime,
                     mode: stat.mode
                 })
-            } else if (this.FS.isFile(stat.mode)) {
-                node.contents = this.MEMFS.getFileDataAsTypedArray(node);
+            } else if (FS.isFile(stat.mode)) {
+                node.contents = T.MEMFS.getFileDataAsTypedArray(node);
                 return callback(null, {
                     timestamp: stat.mtime,
                     mode: stat.mode,
@@ -623,31 +772,29 @@ var Module = new class {
             }
         }
         storeLocalEntry(path, entry, callback) {
-            try {
-                if (this.FS.isDir(entry.mode)) {
-                    this.FS.mkdir(path, entry.mode)
-                } else if (this.FS.isFile(entry.mode)) {
-                    this.FS.writeFile(path, entry.contents, {canOwn: true})
-                } else {
-                    return callback(new Error("node type not supported"))
-                }
-                this.FS.chmod(path, entry.mode);
-                this.FS.utime(path, entry.timestamp, entry.timestamp)
-            } catch (e) {
-                return callback(e)
+            let T=this,FS=T.FS;
+            if (FS.isDir(entry.mode)) {
+                FS.mkdir(path, entry.mode)
+            } else if (FS.isFile(entry.mode)) {
+                FS.writeFile(path, entry.contents, {canOwn: true})
+            } else {
+                return callback(new Error("node type not supported"))
             }
+            FS.chmod(path, entry.mode);
+            FS.utime(path, entry.timestamp, entry.timestamp);
             callback(null)
         }
         removeLocalEntry(path, callback) {
-            if(this.FS.analyzePath(path).exists){
-                var lookup = this.FS.lookupPath(path);
-                var stat = this.FS.stat(path);
-                if (this.FS.isDir(stat.mode)) {
-                    this.FS.rmdir(path)
-                } else if (this.FS.isFile(stat.mode)) {
-                    this.FS.unlink(path)
+            let T=this,FS = T.FS;
+            if(FS.analyzePath(path).exists){
+                var lookup = FS.lookupPath(path);
+                var stat = FS.stat(path);
+                if (FS.isDir(stat.mode)) {
+                    FS.rmdir(path)
+                } else if (FS.isFile(stat.mode)) {
+                    FS.unlink(path)
                 }
-
+    
             }else{
                 return callback(e)
             }
@@ -684,6 +831,7 @@ var Module = new class {
             }
         }
         reconcile(src, dst, callback, storeName) {
+            let T=this;
             var total = 0;
             var create = [];
             Object.keys(src.entries).forEach(key => {
@@ -709,7 +857,7 @@ var Module = new class {
             var errored = false;
             var completed = 0;
             var db = src.type === "remote" ? src.db : dst.db;
-            var store = this.transaction(storeName,db),
+            var store = T.transaction(storeName,db),
                 done = err => {
                     if (err) {
                         if (!done.errored) {
@@ -724,22 +872,22 @@ var Module = new class {
                 };
             create.sort().forEach(path => {
                 if (dst.type === "local") {
-                    this.loadRemoteEntry(store, path, (err, entry) => {
+                    T.loadRemoteEntry(store, path, (err, entry) => {
                         if (err) return done(err);
-                        this.storeLocalEntry(path, entry, done)
+                        T.storeLocalEntry(path, entry, done)
                     })
                 } else {
-                    this.loadLocalEntry(path, (err, entry) => {
+                    T.loadLocalEntry(path, (err, entry) => {
                         if (err) return done(err);
-                        this.storeRemoteEntry(store, path, entry, done)
+                        T.storeRemoteEntry(store, path, entry, done)
                     })
                 }
             });
             remove.sort().reverse().forEach(path => {
                 if (dst.type === "local") {
-                    this.removeLocalEntry(path, done)
+                    T.removeLocalEntry(path, done)
                 } else {
-                    this.removeRemoteEntry(store, path, done)
+                    T.removeRemoteEntry(store, path, done)
                 }
             });
         }
