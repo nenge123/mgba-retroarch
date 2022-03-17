@@ -29,7 +29,7 @@
                     other += `<tr title="${path}"><td><span data-btn="deletepath" data-path="${path}">${delstr}</span></td><td>${filename}</td><td><span data-btn="downpath" data-path="${path}">${downstr}</span></td><td><span data-btn="changepath" data-path="${path}">${renamestr}</span></td></tr>`;
                 }
             }
-            this.RESULT(`<h3>文件列表</h3>`
+            this.RESULT(`<h3>${this.translate('文件列表')}</h3>`
                 +`<table class="game-tablelist">`
                 +`<tr><td colspan="4">${this.translate('游戏文件 - 启动游戏会刷新页面！')}</td></tr>`
                 +`${game}`
@@ -156,8 +156,10 @@
   "默认配置":"reset retroarch.cfg",
   "重载版本(刷新)":"RESET CORES",
   "清空所有数据":"CLEAR DATA",
-  "翻译API":"AI API",
-  "翻译":"AI translate","删除":"",
+  "文件列表":"USER FILES",
+  "翻译API":"AI setting",
+  "翻译":"AI translate",
+  "删除":"",
    "编辑":"Edit",
    "更改":"Change",
    "下载":"Down",

@@ -9,7 +9,7 @@ var Module = new class {
         this.totalDependencies = Math.max(this.totalDependencies, left);
     }
     version = 2.2;
-    fileversion = 2.5;
+    fileversion = 2.4;
     CoreName = 'mgba_config_data';
     BASEPATH = "/home/web_user/retroarch";
     USERPATH = "/userdata";
@@ -57,7 +57,7 @@ var Module = new class {
             this.arguments.pop();
             this.arguments.push(this.GameLink);
         }
-        this.EVENT.$('.game-setting').hidden = false;
+        //this.EVENT.$('.game-setting').hidden = false;
         this.EVENT.$('.game-setting').innerHTML = this.HTML.translate('启动');
     }
     InitializedData() {
@@ -84,7 +84,6 @@ var Module = new class {
         if (!FS.analyzePath(dir).exists){
             let pdir = dir.split('/').slice(0, -1).join('/');
             if (!FS.analyzePath(pdir).exists)FS.createPath('/', pdir,!0,!0);
-            console.log(pdir);
             FS.createPath('/', dir,!0,!0);
         }
         if (bool) {
@@ -93,11 +92,11 @@ var Module = new class {
         } else if (!FS.analyzePath(path).exists) FS.createDataFile(dir, path.split('/').pop(), data, !0, !0);
     }
     async INSTALL_WASM() {
-        let corename = this.CoreName.split('_')[0];
-        let coredata = this.REPLACE_MODULE(await this.IDBFS.getContent('coredata', `${corename}_libretro.js`));
+        let corename = this.CoreName.split('_')[0],content;
+        let coredata = this.REPLACE_MODULE(await this.IDBFS.getContent('data-libjs', `${corename}_libretro.js`));
        // let coredata = this.REPLACE_MODULE(await (await fetch(`assets/${corename}_libretro.js`)).arrayBuffer()); //
-        //(await this.IDBFS.getContent('coredata',`${corename}_libretro.wasm`));
-        this.wasmBinary = await this.IDBFS.getContent('coredata', `${corename}_libretro.wasm`);
+        //(await this.IDBFS.getContent('data-libjs',`${corename}_libretro.wasm`));
+        this.wasmBinary = await this.IDBFS.getContent('data-libjs', `${corename}_libretro.wasm`);
         if (!coredata || !this.wasmBinary) {
             this.SetConfig({ version: null });
             return this.onReady();
@@ -131,6 +130,7 @@ var Module = new class {
                     }
                     delete coreFile[file];
                 }
+                await this.IDBFS.syncfs(`${this.BASEPATH}/bundle`);
                 coreFile = null;
                 if(FS.analyzePath(this.CONFIGPATH).exists){
                     FS.unlink(this.CONFIGPATH);
@@ -259,6 +259,7 @@ var Module = new class {
     REPLACE_MODULE(result) {
         if (result instanceof ArrayBuffer) result = new Uint8Array(result);
         if (result instanceof Uint8Array) result = new TextDecoder().decode(result);
+        if(!result||result.byteLength==0) return ;
         return result.replace(
             /var\s?__specialEventTargets\s?=\s?\[0,\s?typeof\s?document\s?!==\s?"undefined"\s?\?\s?document\s?:\s?0,\s?typeof\s?window\s?!==\s?"undefined"\s?\?\s?window\s?:\s?0\];/,
             'var __specialEventTargets=[0,Module.canvas,window];'
@@ -303,7 +304,7 @@ var Module = new class {
             let libresult = await this.unZip(libbuf);
             for (var i in libresult) {
                 if (libresult[i]) {
-                    await this.IDBFS.setItem('coredata', i, {
+                    await this.IDBFS.setItem('data-libjs', i, {
                         'content': libresult[i],
                         'mode': 33206,
                         timestamp
@@ -324,7 +325,7 @@ var Module = new class {
             let libresult2 = await this.unZip(libbuf2);
             for (var i in libresult2) {
                 if (libresult2[i]) {
-                    await this.IDBFS.setItem('coredata', i, {
+                    await this.IDBFS.setItem('data-libjs', i, {
                         'content': libresult2[i],
                         'mode': 33206,
                         timestamp
@@ -351,7 +352,7 @@ var Module = new class {
     }
     async GetFile(str) {
         if (this.MyFile[str]) return this.MyFile[str];
-        let file = await this.IDBFS.getContent('coredata', str);
+        let file = await this.IDBFS.getContent('data-libjs', str);
         if (!file) {
             this.MyFile[str] = `assets/js/${str}`;
             return this.MyFile[str];
@@ -413,22 +414,31 @@ var Module = new class {
     }
     IDBFS = new class {
         constructor(Module) {
-            this.Module = Module;
-            this.DB_STORE_MAP[Module.USERPATH] = 'userdata';
-            this.DB_STORE_MAP[`${Module.BASEPATH}/userdata`] = 'config';
-            this.DB_STORE_MAP[`${Module.BASEPATH}/bundle`] = 'assets';
-            this.DB_NAME = Module.DB_NAME;
+            if(Module){
+                if(Module.DB_NAME)this.DB_NAME = Module.DB_NAME;
+                let _dD = {
+                    Module:()=>{
+                        return Module;
+                    },
+                    FS:()=>{
+                        return self.FS || self.Module.FS || this.Module.FS;
+                    },
+                    MEMFS:()=>{
+                        return this.FS.filesystems.MEMFS ||this.FS.MEMFS;
+                    }
+                };
+                for(let _nN in _dD)Object.defineProperty(this,_nN,{'get':_dD[_nN]},'get Module Info');
+                if(Module.USERPATH)this.DB_STORE_MAP[Module.USERPATH] = 'userdata';
+                if(Module.BASEPATH){
+                    this.DB_STORE_MAP[`${Module.BASEPATH}/userdata`] = 'config';
+                    this.DB_STORE_MAP[`${Module.BASEPATH}/bundle`] = 'assets';
+                }
+            }
         };
         get indexedDB() {
             let ret = window.indexedDB || window.mozIndexedDB || window.webkitIndexedDB;
             if (!ret) throw "IDBFS used, but indexedDB not supported";
             return ret
-        }
-        get FS(){
-            return self.FS || self.Module.FS;
-        }
-        get MEMFS(){
-            return this.FS.filesystems.MEMFS ||this.FS.MEMFS;
         }
         async getItem(store,name,cb) {
             if(!name) return await this.GetItems(store,cb);
@@ -486,7 +496,8 @@ var Module = new class {
             }
             return new Promise(callback => {
                 T.transaction(store,db).put(data, name).onsuccess = e => {
-                    callback(e.target.result),cb&&cb(e.target.result)};
+                    let result = e.target.result;
+                    callback(result),cb&&cb(result)};
             });
         }
         async getContent(store, name) {
@@ -497,7 +508,7 @@ var Module = new class {
         async getAllKeys(store,cb) {
             let T=this,db = await T.GET_DB(store);
             return new Promise(callback => {
-                T.transaction(store,db,!0).getAllKeys().onsuccess = e => {callback(e.target.result),cb&&cb(e.target.result)};
+                T.transaction(store,db,!0).getAllKeys().onsuccess = e => {let result = e.target.result;callback(result),cb&&cb(result)};
             });
         }
         async GetItems(store,cb) {
@@ -518,21 +529,31 @@ var Module = new class {
         }
         async FectchItem(ARG){
             let T=this,key = ARG.key || ARG.url.split('/').pop(),
-                response = await fetch(ARG.url),
-                type = ARG.type || 'arrayBuffer',
-                downsize = response.headers.get("Content-Length") || 1024,
-                havesize = 0;
-            if(ARG.store){
-                let content = await T.getContent(ARG.store,key);
-                if(content&&(!downsize || (downsize&&downsize==content.length) || response.status == 404)){
-                    ARG.success&&ARG.success(content);
-                    return content;
+            result = {},
+            callback = result=>{
+                if(result&&result.content){
+                    ARG.success&&ARG.success(result.content);
+                    return result.content;
+                }
+                return ;
+            };
+            if(ARG.store&&!ARG.unset){
+                result = await T.getItem(ARG.store,key);
+                if(!ARG.checksize&&callback(result)){
+                    return result.content;
                 }
             }
+            let response = await fetch(ARG.url),
+            type = ARG.type || 'arrayBuffer',
+            downsize = response.headers.get("Content-Length") || 1024,
+            havesize = 0;            
             if (response.status == 404) {
                 ARG.error && ARG.error(response.statusText);
-                return;
+                return callback(result);
+            }else if(ARG.checksize&&downsize&&result.filesize==downsize&&callback(result)){
+                return result.content;
             }
+            delete result.content;
             const reader = response.body.getReader();
             const stream = new ReadableStream({
                 start(controller) {
@@ -565,8 +586,7 @@ var Module = new class {
                 filesize = content.byteLength;
             };
             if(ARG.unpack){
-                content = await T.CHECK_FILE(content,key)||content;
-                console.log(content);
+                content = await T.CHECK_FILE(content,key);
             }
             if(ARG.store){
                 T.setItem(ARG.store,key,{
@@ -581,21 +601,21 @@ var Module = new class {
         }
         async CHECK_FILE(u8,name){
             if(u8 instanceof ArrayBuffer) u8 = new Uint8Array(u8);
-            let head = new TextDecoder().decode(u8.slice ? u8.slice(0, 6) : subarray(0, 6)),
+            let head = new TextDecoder().decode(u8.slice ? u8.slice(0,8):u8.subarray(0,8)),
                 Module=this.Module,
-                data = {};
-            if (/^7z/.test(head)) data = await Module.un7z(u8);
-            else if (/^Rar!/.test(head) || /[\x52][\x45][\x7E][\x5E]/.test(head)) data = await Module.unRAR(u8);
-            else if (/^PK/.test(head)) data = await Module.unZip(u8);
-            else {
-                data[name] = u8;
-            }
-            return data;
-
+                action = null;
+            if (/^7z/.test(head)) action = 'un7z';
+            else if (/^Rar!/.test(head) || /[\x52][\x45][\x7E][\x5E]/.test(head))action = 'unRAR';
+            else if (/^PK/.test(head)) action = 'unZip';
+            if(action&&Module[action]) return await Module[action](u8);
+            return u8;
         }
         maxsize = 0x6400000;
         part = '-part-';
-        DB_STORE_MAP = {};
+        DB_STORE_MAP = {
+            'data-libjs':null,
+            'data-rooms':null
+        };
         DB_MOUNT_MAP = {};
         IsReady(){
             let mounts = FS.root.mount.mounts;
@@ -624,14 +644,25 @@ var Module = new class {
             },1);
             return node;
         }
+        findMount(mount){
+            let T=this,FS = T.FS;
+            if(!FS) return;
+            let mounts = FS.root.mount.mounts;
+            for(var i =0;i<mounts.length;i++){
+                if(mounts[i].mountpoint == mount) return mounts[i];
+            }
+            let node = T.MEMFS.createNode(null,mount, 16384 | 511, 0);
+            return node.mount;
+        }
         syncfs(mount, populate, callback) {
             let T=this;
-            return new Promise(cb => {
+            return new Promise((cb,resolve) => {
+                if(!mount.mountpoint) mount = T.findMount(mount);
+                let storeName = T.DB_STORE_MAP[mount.mountpoint];
+                if (!storeName) return resolve('Store Name erro');
                 callback = callback || populate||cb;
                 T.getLocalSet(mount, (err, local) => {
-                    if (err) return callback(err);
-                    let storeName = T.DB_STORE_MAP[mount.mountpoint];
-                    if (!storeName) return callback('Store Name erro');
+                    if (err) return resolve(err);
                     T.getRemoteSet(storeName,remote => {
                         var src = populate ? remote : local;
                         var dst = populate ? local : remote;
@@ -673,21 +704,15 @@ var Module = new class {
         get StoreNames(){
             return this.db.objectStoreNames;
         }
-        async GET_DB(storeName, version,key) {
+        async GET_DB(storeName,version,key) {
             let T=this;
             return new Promise((callback, err) => {
-                if (T.db) {
-                    if (T.StoreNames.contains(storeName)) return callback(T.db);
-                    else {
-                        T.close();
-                        version = T.db.version + 1;
-                    }
-                }
+                if (T.db&&T.StoreNames.contains(storeName)) return callback(T.db);
                 let req = T.indexedDB.open(T.DB_NAME, version);
                 if (!req) return err("Unable to connect to IndexedDB");
                 req.onupgradeneeded = e => {
                     T.db = e.target.result;
-                    var fileStore;
+                    let fileStore,
                         createIndex= (store,keyId)=>store.createIndex(keyId, keyId, {"unique": false});
                     if (!T.StoreNames.contains(storeName)) {
                         for (var i in T.DB_STORE_MAP) {

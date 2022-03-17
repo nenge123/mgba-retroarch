@@ -30,8 +30,8 @@
             Module.resumeMainLoop&&Module.resumeMainLoop();
             if(this.istouch){
                 setTimeout(()=>{
-                    Module._free();
-                    Module._fflush();
+                    //Module._free();
+                    //Module._fflush();
                     Module.pauseMainLoop&&Module.pauseMainLoop();
                     this.BtnMap['hideui']();
                     this.$('.game-setting').classList.remove('game-tp');
@@ -41,7 +41,7 @@
             }
         }
         setLanguage(str){
-            if(this.$('.game-setting').hidden || !Module.callMain) return ;
+            if(this.$('.game-setting').innerHTML != this.HTML.translate('启动')) return ;
             this.SetConfig({'lang':str||''});
             this.$('.game-setting').click();
         }
@@ -95,6 +95,11 @@
                     this.BtnMap['CloseMsg']();
                     return stopEvent(e);
                 });
+                this.$$('[data-lang]').forEach(elm=>{
+                    this.on(elm,'click',e=>{
+                        this.setLanguage(elm.getAttribute("data-lang"));
+                    });
+                })
                 this.on($('.game-setting'),'click',e=>{
                     if(Module.callMain){
                         if(typeof Module.callMain === 'function'){
