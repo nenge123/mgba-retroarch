@@ -26,9 +26,6 @@
         }
         resumeMainLoop(){
             if(Module.callMain) return;
-            Module.pauseMainLoop&&Module.pauseMainLoop();
-            Module.resumeMainLoop&&Module.resumeMainLoop();
-            if(this.istouch){
                 setTimeout(()=>{
                     //Module._free();
                     //Module._fflush();
@@ -38,7 +35,6 @@
                     this.$('.game-setting').innerHTML = this.HTML.translate('继续');
                     Module.callMain = true;
                 },500);
-            }
         }
         setLanguage(str){
             if(this.$('.game-setting').innerHTML != this.HTML.translate('启动')) return ;
@@ -62,28 +58,6 @@
                 e.preventDefault();
                 this.canvas.dispatchEvent(this.KeyboardEvent(e));
             });
-            this.on(document,'visibilitychange',e=>{
-                if(Module.callMain) return;
-                if (document.visibilityState === 'visible'){
-                    Module.resumeMainLoop&&Module.resumeMainLoop();
-                    if(this.istouch)setTimeout(()=>this.resumeMainLoop(),1000);
-                }else if(document.visibilityState === 'hidden'){
-                    this.BtnMap['closelist']();
-                    Module.pauseMainLoop&&Module.pauseMainLoop();
-                }
-            });
-            this.on(window,'pagehide',e=>{
-                if(Module.callMain) return;
-                if (e.persisted) {
-                    Module.pauseMainLoop&&Module.pauseMainLoop();
-                }
-            });
-            this.on(window,'pageshow',e=>{
-                if(Module.callMain) return;
-                if (e.persisted) {
-                    this.resumeMainLoop();
-                }
-            });
             let $ = e=>document.querySelector(e),
                 $$ = e=>document.querySelectorAll(e),
                 ELM_ATTR = (elm, key)=>{if (elm!=undefined &&elm!=null&& elm.nodeType == 1) return elm.getAttribute(key);},
@@ -100,6 +74,27 @@
                         this.setLanguage(elm.getAttribute("data-lang"));
                     });
                 })
+                this.reloadAudio = ()=>{
+                    Module["pauseMainLoop"]();
+                    let RA = Module.RA;
+                    RA.bufIndex = 0;
+                    RA.bufOffset = 0
+                    var ac = window["AudioContext"] || window["webkitAudioContext"];
+                    if (!ac) return 0;
+                    RA.context.close();
+                    delete RA.context;
+                    RA.context = new ac;
+                    RA.numBuffers = Module.latency * RA.context.sampleRate / (1e3 * RA.BUFFER_SIZE) | 0;
+                    if (RA.numBuffers < 2) RA.numBuffers = 2;
+                    for (var i = 0; i < RA.numBuffers; i++) {
+                        RA.buffers[i] = RA.context.createBuffer(2, RA.BUFFER_SIZE, RA.context.sampleRate);
+                        RA.buffers[i].endTime = 0
+                    }
+                    RA.nonblock = false;
+                    RA.startTime = 0;
+                    RA.context.createGain();
+                    window["setTimeout"](RA.setStartTime, 0);
+                };
                 this.on($('.game-setting'),'click',e=>{
                     if(Module.callMain){
                         if(typeof Module.callMain === 'function'){
@@ -114,11 +109,16 @@
                             }
 
                         }else if(Module.callMain === true){
-                            Module.pauseMainLoop&&Module.pauseMainLoop();
+                            let RA = Module.RA;
+                            if(!RA.context || RA.context.state !='suspended'){
+                                this.reloadAudio();
+                            }
+                            RA.context.resume();
+                            Module.resumeMainLoop();
+
                             delete Module.callMain;
                             this.StartRetroArch();
-                            //fix mobile
-                            Module.resumeMainLoop&&Module.resumeMainLoop();
+                            
                         } 
                     }else{
                         this.BtnMap['settings']();
@@ -253,8 +253,10 @@
             });
         }
         StartRetroArch(){
+            this.$('.game-container').classList.add('onstart');
             this.$('.game-setting').classList.add('game-tp');
             this.$('.game-setting').innerHTML = this.HTML.translate('菜单');
+            this.$('#canvas').hidden = false;
             if(this.istouch){
                 this.$('.game-ctrl').hidden = false
                 this.$('.game-setting').hidden = true;
@@ -694,8 +696,6 @@
                 this.AspectRatio = wh&&wh[0]&&wh[1]&&Number(wh[0])/Number(wh[1]);
                 if(!this.AspectRatio)this.AspectRatio = 1.5;
                 if(Module._main)this.resize();
-            }else if((/Unloading\score\ssymbols\.\.$/i).test(text)){
-                this.resumeMainLoop();
             }
             else{
               let data = [

@@ -8,8 +8,8 @@ var Module = new class {
     monitorRunDependencies = function(left) {
         this.totalDependencies = Math.max(this.totalDependencies, left);
     }
-    version = 2.2;
-    fileversion = 2.4;
+    version = 2.6;
+    fileversion = 2.6;
     CoreName = 'mgba_config_data';
     BASEPATH = "/home/web_user/retroarch";
     USERPATH = "/userdata";
@@ -281,6 +281,10 @@ var Module = new class {
             /function _fd_write\(fd,\s?iov,\s?iovcnt,\s?pnum\)\s?\{\s?\n?\s*try\s?\{\n?\s*var stream\s?=\s?SYSCALLS\.getStreamFromFD\(fd\);\n?\s*var\s?num\s?=\s?SYSCALLS\.doWritev\(stream,\s?iov,\s?iovcnt\);/,
             'function _fd_write(fd,iov,iovcnt,pnum){try{var stream=SYSCALLS.getStreamFromFD(fd);var num = SYSCALLS.doWritev(stream, iov, iovcnt);' +
             'stream&&stream.node&&Module.CHECK_SAVE(stream,num,iov, iovcnt);'
+        ).replace(/_RWebAudioInit\(latency\)\s?\{/,'_RWebAudioInit(latency){Module.latency=latency;'
+        ).replace(
+            /_RWebAudioWrite\(buf,\s?size\)\s?\{/,
+            '_RWebAudioWrite(buf,size){if(RA.context.state!="running"){Module.pauseMainLoop();Module.EVENT.resumeMainLoop();return;}'
         );
     }
     CHECK_SAVE(){
@@ -636,6 +640,7 @@ var Module = new class {
             });
         }
         mount(mount) {
+            console.log(mount);
             let T=this,node = T.MEMFS.createNode(null,mount.mountpoint, 16384 | 511, 0);
             setTimeout(()=>{
                 T.syncfs(node.mount,!0,e=>{

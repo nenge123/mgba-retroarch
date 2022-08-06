@@ -12,7 +12,7 @@
     <link rel="apple-touch-icon" href="assets/icon/icon.png">
     <link rel="icon" href="assets/icon/icon.png" type="image/png" />
     <title>MGBA Web emulator by retroarch</title>
-    <link rel="stylesheet" href="assets/css/style.css" />
+    <link rel="stylesheet" href="assets/css/style.css?2" />
 </head>
 <body>
     <div class="game-container">
@@ -21,6 +21,7 @@
             <p>打赏Nenge</p>
             <p></p><button data-lang="" >中文界面启动</button></p>
             <p></p><button data-lang="en" >Running English</button></p>
+            <p>2022/08/06 更好地修复切换窗口时,声音导致的崩溃.</p>
             <p>Gitee(国内):<a href="https://gitee.com/nenge/mgba">https://github.com/nenge123/mgba</a></p>
             <p>Github:<a href="https://github.com/nenge123/mgba-retroarch/">https://github.com/nenge123/mgba-retroarch/</a></p>
             <p><a class="sponsors" href="https://github.com/sponsors/libretro" target="_blank"><svg aria-hidden="true" height="16" viewBox="0 0 16 16" version="1.1" width="16" data-view-component="true">
@@ -32,7 +33,7 @@
             <p>调用方式可以 你的网站地址?game=roomlink</p>
             <p>using [your host]?game=roomlink</p>
         </div>
-        <canvas id="canvas" width="240" height="160"></canvas>
+        <canvas id="canvas" width="240" height="160" hidden></canvas>
         <button class="game-setting" data-btn="onload" hidden>启动/Runnig</button>
         <div class="game-ctrl" hidden>
             <div class="game-ctrl-menu">
@@ -65,8 +66,8 @@
         </div>
         <div class="game-msg" hidden></div>
     </div>
-    <script src="assets/js/Module.js"></script>
-    <script src="assets/js/Module.EVENT.js"></script>
-    <script src="assets/js/Module.HTML.js"></script>
+    <script src="assets/js/Module.js?v2"></script>
+    <script src="assets/js/Module.EVENT.js?v2"></script>
+    <script src="assets/js/Module.HTML.js?v2"></script>
 </body>
 </html>

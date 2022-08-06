@@ -1,17 +1,15 @@
 
-body{margin: 0px;padding: 0px;overflow: hidden;
-    touch-action: none;}
+body{margin: 0px;padding: 0px;touch-action: none;}
 .game-container{
-    position: absolute;
+    position: relative;
     z-index: 9999;
-    left: 0px;
-    top: 0px;
-    background: #000;
-    width: 100vw;
-    height: 100vh;
-    overflow: hidden;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
     touch-action: none;
 }
+body{margin: 0px;padding: 0px;touch-action: none;}
 .game-container canvas{
     position: absolute;
     z-index: 10000;
@@ -27,7 +25,9 @@ body{margin: 0px;padding: 0px;overflow: hidden;
     background-color: #FFF;
     text-align: center;
     z-index: 10001;
-    position: absolute;
+    position: relative;
+    padding: 10px;
+    font-size: .625rem;
     top: 0px;
     left: 0;
     right: 0;
@@ -104,8 +104,10 @@ span hr{
     width: 80%;
 }
 .game-list {
-    top: 100%;
-    display: flex;
+    top: -100%;
+    left: 0;
+    right: 0;
+    display: none;
     justify-content: space-between;
     overflow: hidden;
     touch-action:none;
@@ -115,6 +117,15 @@ span hr{
     background-color: #ffffff4d;
     z-index: 10006;
     font-size: 14px;
+}
+.game-container.onstart{
+    
+    width: 100vw;
+    height: 100vh;
+    background: #000;
+}
+.game-container.onstart .game-list{
+    display: flex;
 }
 .game-result,
 .game-list-title {
@@ -416,10 +427,13 @@ span hr{
         width: 100vw;
         height: 100vh;
     }
+    #canvas{
+        position: relative;
+    }
     .game-ctrl{
         max-height: 450px;/*calc(100vh - 100vw / 1.5); */
         top:unset;
-        bottom:0px;
+        position:relative;
         left: 0;
         right: 0;
     }
